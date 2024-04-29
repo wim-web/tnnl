@@ -85,6 +85,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch keypress := msg.String(); keypress {
 		case "ctrl+c", "q":
+			if m.list.FilterState() == list.Filtering {
+				break
+			}
 			m.quitting = true
 			return m, tea.Quit
 
