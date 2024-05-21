@@ -3,7 +3,7 @@ module github.com/wim-web/tnnl
 go 1.22
 
 require (
-	github.com/aws/aws-sdk-go v1.51.30
+	github.com/aws/aws-sdk-go v1.53.7
 	github.com/aws/aws-sdk-go-v2/config v1.27.11
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.41.7
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.50.0
