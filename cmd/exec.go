@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/spf13/cobra"
@@ -25,5 +26,6 @@ var execCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(execCmd)
 
-	execCmd.Flags().String("command", "bash", "exec command(default: bash)")
+	commandDefault := "sh"
+	execCmd.Flags().String("command", commandDefault, fmt.Sprintf("exec command(default: %s)", commandDefault))
 }
