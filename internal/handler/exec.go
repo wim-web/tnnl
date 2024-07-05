@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func ExecHandler(cmd string, wait int) error {
+func ExecHandler(cmd string, wait int, inputCluster string, inputService string) error {
 	cfg, err := config.LoadDefaultConfig(context.Background())
 
 	if err != nil {
@@ -21,7 +21,7 @@ func ExecHandler(cmd string, wait int) error {
 
 	ecsService := ecs.NewFromConfig(cfg)
 
-	cluster, task, container, quit, err := view.Cluster2Task2Container(ecsService)
+	cluster, task, container, quit, err := view.Cluster2Task2Container(ecsService, inputCluster, inputService)
 
 	if quit {
 		return nil
