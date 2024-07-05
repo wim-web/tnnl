@@ -21,7 +21,7 @@ func PortforwardHandler(doc command.DocumentName, params map[string][]string) er
 	ssmService := ssm.NewFromConfig(cfg)
 	ecsService := ecs.NewFromConfig(cfg)
 
-	cluster, task, container, quit, err := view.Cluster2Task2Container(ecsService)
+	cluster, task, container, quit, err := view.Cluster2Task2Container(ecsService, "", "")
 
 	if quit {
 		return nil

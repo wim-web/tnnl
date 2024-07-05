@@ -38,13 +38,24 @@ func (ts tasks) findByName(name string) (types.Task, bool) {
 	return types.Task{}, false
 }
 
-func SelectTaskView(c *ecs.Client, cluster string) (types.Task, bool, error) {
+func SelectTaskView(c *ecs.Client, cluster string, inputService string) (types.Task, bool, error) {
 	var task types.Task
+	var listTasksInput *ecs.ListTasksInput
 
-	ltRes, err := c.ListTasks(context.Background(), &ecs.ListTasksInput{
-		Cluster:       aws.String(cluster),
-		DesiredStatus: types.DesiredStatusRunning,
-	})
+	if inputService != "" {
+		listTasksInput = &ecs.ListTasksInput{
+			Cluster:       aws.String(cluster),
+			DesiredStatus: types.DesiredStatusRunning,
+			ServiceName:   &inputService,
+		}
+	} else {
+		listTasksInput = &ecs.ListTasksInput{
+			Cluster:       aws.String(cluster),
+			DesiredStatus: types.DesiredStatusRunning,
+		}
+	}
+
+	ltRes, err := c.ListTasks(context.Background(), listTasksInput)
 
 	if err != nil {
 		return task, false, err
@@ -60,6 +71,10 @@ func SelectTaskView(c *ecs.Client, cluster string) (types.Task, bool, error) {
 	}
 
 	tasks := tasks(dtRes.Tasks).onlyEnableExecuteCommand()
+
+	if len(tasks) == 1 {
+		return tasks[0], false, nil
+	}
 
 	taskName, quit, err := RenderList("Select a Task", tasks.names())
 

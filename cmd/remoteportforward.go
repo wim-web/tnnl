@@ -53,7 +53,7 @@ var remoteportforwardCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(remoteportforwardCmd)
+	RootCmd.AddCommand(remoteportforwardCmd)
 
 	remoteportforwardCmd.Flags().StringP("local-port", "l", "", "local port. if not specify, auto assigned")
 
