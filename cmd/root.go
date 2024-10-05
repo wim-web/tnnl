@@ -11,9 +11,6 @@ var RootCmd = &cobra.Command{
 	Use:   "tnnl",
 	Short: "",
 	Long:  ``,
-	// Run: func(cmd *cobra.Command, args []string) {
-
-	// },
 }
 
 func Execute() {
