@@ -7,12 +7,13 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/wim-web/tnnl/internal/input"
 	"github.com/wim-web/tnnl/internal/view"
 	"github.com/wim-web/tnnl/pkg/command"
 	"golang.org/x/sync/errgroup"
 )
 
-func ExecHandler(cmd string, wait int, inputCluster string, inputService string) error {
+func ExecHandler(input input.ExecInput) error {
 	cfg, err := config.LoadDefaultConfig(context.Background())
 
 	if err != nil {
@@ -21,7 +22,7 @@ func ExecHandler(cmd string, wait int, inputCluster string, inputService string)
 
 	ecsService := ecs.NewFromConfig(cfg)
 
-	cluster, task, container, quit, err := view.Cluster2Task2Container(ecsService, inputCluster, inputService)
+	cluster, task, container, quit, err := view.Cluster2Task2Container(ecsService, input.Cluster, input.Service)
 
 	if quit {
 		return nil
@@ -30,7 +31,7 @@ func ExecHandler(cmd string, wait int, inputCluster string, inputService string)
 		return err
 	}
 
-	if wait > 0 {
+	if input.Wait > 0 {
 		eg, ctx := errgroup.WithContext(context.Background())
 		ctx, cancel := context.WithCancel(ctx)
 
@@ -41,7 +42,7 @@ func ExecHandler(cmd string, wait int, inputCluster string, inputService string)
 					Cluster: &cluster,
 					Tasks:   []string{*task.TaskArn},
 				},
-				time.Duration(wait)*time.Second,
+				time.Duration(input.Wait)*time.Second,
 			)
 			if err != nil {
 				return err
@@ -74,7 +75,7 @@ func ExecHandler(cmd string, wait int, inputCluster string, inputService string)
 		ecsService,
 		cluster,
 		*task.TaskArn,
-		cmd,
+		input.Cmd,
 		container.Name,
 		cfg.Region,
 	)
