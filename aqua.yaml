@@ -13,3 +13,4 @@ registries:
 packages:
   - name: golang/go@go1.23.2
   - name: spf13/cobra-cli@v1.3.0
+  - name: hashicorp/terraform@v1.9.7
