@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -21,4 +22,15 @@ func Execute() {
 }
 
 func init() {
+	RootCmd.AddCommand(versionCmd)
+}
+
+var Version string
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("%s\n", Version)
+	},
 }
