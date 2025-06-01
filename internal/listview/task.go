@@ -3,9 +3,9 @@ package listview
 import (
 	"context"
 
+	"github.com/aws/aws-sdk-go-v2/aws" // Changed to v2 aws
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
-	"github.com/aws/aws-sdk-go/aws"
 )
 
 type tasks []types.Task
@@ -38,7 +38,7 @@ func (ts tasks) findByName(name string) (types.Task, bool) {
 	return types.Task{}, false
 }
 
-func SelectTaskView(c *ecs.Client, cluster string, inputService string) (types.Task, bool, error) {
+func SelectTaskView(c ecsiface, cluster string, inputService string) (types.Task, bool, error) {
 	var task types.Task
 	var listTasksInput *ecs.ListTasksInput
 
@@ -63,7 +63,7 @@ func SelectTaskView(c *ecs.Client, cluster string, inputService string) (types.T
 
 	dtRes, err := c.DescribeTasks(context.Background(), &ecs.DescribeTasksInput{
 		Tasks:   ltRes.TaskArns,
-		Cluster: &cluster,
+		Cluster: aws.String(cluster), // ensure aws.String from v2 is used
 	})
 
 	if err != nil {

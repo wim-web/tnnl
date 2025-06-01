@@ -16,7 +16,7 @@ var (
 	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
 )
 
-func RenderList(title string, l []string) (string, bool, error) {
+var RenderList = func(title string, l []string) (string, bool, error) {
 	var items []list.Item
 	for _, s := range l {
 		items = append(items, item(s))
