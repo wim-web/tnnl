@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 )
 
-func SelectClusterView(c *ecs.Client) (string, bool, error) {
+func SelectClusterView(c ecsiface) (string, bool, error) {
 	input := &ecs.ListClustersInput{}
 	res, err := c.ListClusters(context.Background(), input)
 
@@ -15,7 +15,7 @@ func SelectClusterView(c *ecs.Client) (string, bool, error) {
 		return "", false, err
 	}
 
-	var clusterNames []string
+	clusterNames := []string{}
 
 	for _, arn := range res.ClusterArns {
 		v := strings.Split(arn, "/")
