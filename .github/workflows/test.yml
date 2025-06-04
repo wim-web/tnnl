@@ -1,0 +1,31 @@
+name: Test
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4.2.2
+
+    - name: Install aqua
+      uses: aquaproj/aqua-installer@v3.0.1
+      with:
+        aqua_version: v2.25.1
+        enable_aqua_install: true
+        aqua_opts: ""
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Run tests
+      run: go test -v -race -coverprofile=coverage.out ./...
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4.6.0
+      with:
+        file: ./coverage.out
+        flags: unittests
+        fail_ci_if_error: false
