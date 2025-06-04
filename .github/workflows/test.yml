@@ -11,7 +11,7 @@ jobs:
     - uses: actions/checkout@v4.2.2
 
     - name: Install aqua
-      uses: aquaproj/aqua-installer@v3.0.1
+      uses: aquaproj/aqua-installer@5e54e5cee8a95ee2ce7c04cb993da6dfad13e59c # v3.1.2
       with:
         aqua_version: v2.25.1
         enable_aqua_install: true
