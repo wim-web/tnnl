@@ -1,6 +1,6 @@
 module github.com/wim-web/tnnl
 
-go 1.22
+go 1.24.0
 
 require (
 	github.com/aws/aws-sdk-go v1.55.5
@@ -11,7 +11,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.1.2
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/spf13/cobra v1.8.1
-	golang.org/x/sync v0.8.0
+	golang.org/x/sync v0.17.0
 )
 
 require (
