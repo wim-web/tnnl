@@ -12,6 +12,14 @@ var RootCmd = &cobra.Command{
 	Use:   "tnnl",
 	Short: "",
 	Long:  ``,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if shortVersion {
+			fmt.Printf("%s\n", Version)
+			return nil
+		}
+
+		return cmd.Help()
+	},
 }
 
 func Execute() {
@@ -23,9 +31,11 @@ func Execute() {
 
 func init() {
 	RootCmd.AddCommand(versionCmd)
+	RootCmd.Flags().BoolVarP(&shortVersion, "version", "v", false, "Print the version")
 }
 
 var Version string
+var shortVersion bool
 
 var versionCmd = &cobra.Command{
 	Use:   "version",

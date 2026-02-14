@@ -8,6 +8,7 @@
 - `exec`: ECS Exec（`ecs execute-command` 相当）を実行
 - `portforward`: `AWS-StartPortForwardingSession` を使ってタスクへポートフォワード
 - `remoteportforward`: `AWS-StartPortForwardingSessionToRemoteHost` を使ってリモートホストへポートフォワード
+- `update`: GitHub Releases から最新バージョンを取得して `tnnl` 自身を更新
 - `make-input-file`: 各コマンド用の入力 JSON テンプレートを生成
 
 ## 前提条件
@@ -27,6 +28,13 @@ go install github.com/wim-web/tnnl@latest
 https://github.com/wim-web/tnnl/releases
 
 ## 使い方
+
+### バージョン確認
+
+```bash
+tnnl version
+tnnl -v
+```
 
 ### 1. exec
 
@@ -70,6 +78,19 @@ tnnl remoteportforward -r 3306 --host db.example.local -l 13306
 - `--host` (必須)
 - `-l, --local-port` (省略時は空きポートを自動割当)
 - `--input-file` (入力 JSON ファイルパス)
+
+### 4. update
+
+`tnnl` の実行バイナリを最新リリースへ更新します。
+
+```bash
+tnnl update
+```
+
+補足:
+
+- GitHub Releases へアクセスできるネットワーク環境が必要です。
+- 実行中の `tnnl` バイナリ配置先に書き込み権限が必要です。
 
 ## インタラクティブ選択の挙動
 
