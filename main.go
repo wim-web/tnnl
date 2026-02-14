@@ -8,6 +8,7 @@ import (
 	_ "github.com/wim-web/tnnl/cmd/exec"
 	_ "github.com/wim-web/tnnl/cmd/portforward"
 	_ "github.com/wim-web/tnnl/cmd/remoteportforward"
+	_ "github.com/wim-web/tnnl/cmd/update"
 )
 
 //go:embed .version
