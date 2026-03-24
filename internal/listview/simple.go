@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 var (
@@ -26,7 +26,7 @@ func RenderList(title string, l []string) (string, bool, error) {
 	list.Title = title
 	m := model{list: list}
 
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m)
 
 	mi, err := p.Run()
 
@@ -105,6 +105,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m model) View() string {
-	return "\n" + m.list.View()
+func (m model) View() tea.View {
+	v := tea.NewView("\n" + m.list.View())
+	v.AltScreen = true
+	return v
 }
