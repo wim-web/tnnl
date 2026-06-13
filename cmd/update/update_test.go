@@ -1,12 +1,53 @@
 package update
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/wim-web/tnnl/cmd"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestFetchLatestReleaseUsesLatestReleaseRedirect(t *testing.T) {
+	originalClient := http.DefaultClient
+	t.Cleanup(func() {
+		http.DefaultClient = originalClient
+	})
+
+	http.DefaultClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if got, want := req.URL.String(), latestReleaseURL; got != want {
+				t.Fatalf("request URL = %q, want %q", got, want)
+			}
+			if got := req.Header.Get("Authorization"); got != "" {
+				t.Fatalf("Authorization header = %q, want empty", got)
+			}
+
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Body:       http.NoBody,
+				Header: http.Header{
+					"Location": []string{"https://github.com/wim-web/tnnl/releases/tag/v1.2.3"},
+				},
+			}, nil
+		}),
+	}
+
+	got, err := fetchLatestRelease()
+	if err != nil {
+		t.Fatalf("fetchLatestRelease() error = %v", err)
+	}
+	if want := "v1.2.3"; got.TagName != want {
+		t.Fatalf("fetchLatestRelease().TagName = %q, want %q", got.TagName, want)
+	}
+}
 
 func TestNormalizeVersion(t *testing.T) {
 	tests := []struct {
@@ -43,13 +84,8 @@ func TestNormalizeVersion(t *testing.T) {
 
 func TestAssetURL(t *testing.T) {
 	rel := release{
-		TagName: "v0.6.0",
-		Assets: []assetInfo{
-			{
-				Name:        "tnnl_darwin_arm64.tar.gz",
-				DownloadURL: "https://example.com/tnnl_darwin_arm64.tar.gz",
-			},
-		},
+		TagName:         "v0.6.0",
+		DownloadBaseURL: "https://github.com/wim-web/tnnl/releases/download/v0.6.0",
 	}
 
 	got, err := rel.assetURL("tnnl_darwin_arm64.tar.gz")
@@ -57,7 +93,7 @@ func TestAssetURL(t *testing.T) {
 		t.Fatalf("assetURL() unexpected error: %v", err)
 	}
 
-	if want := "https://example.com/tnnl_darwin_arm64.tar.gz"; got != want {
+	if want := "https://github.com/wim-web/tnnl/releases/download/v0.6.0/tnnl_darwin_arm64.tar.gz"; got != want {
 		t.Fatalf("assetURL() = %q, want %q", got, want)
 	}
 }
