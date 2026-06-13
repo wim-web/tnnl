@@ -4,11 +4,11 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	releaseAPIURL = "https://api.github.com/repos/wim-web/tnnl/releases/latest"
-	binaryName    = "tnnl"
+	latestReleaseURL = "https://github.com/wim-web/tnnl/releases/latest"
+	binaryName       = "tnnl"
 )
 
 var UpdateCmd = &cobra.Command{
@@ -36,13 +36,8 @@ var UpdateCmd = &cobra.Command{
 }
 
 type release struct {
-	TagName string      `json:"tag_name"`
-	Assets  []assetInfo `json:"assets"`
-}
-
-type assetInfo struct {
-	Name        string `json:"name"`
-	DownloadURL string `json:"browser_download_url"`
+	TagName         string
+	DownloadBaseURL string
 }
 
 func init() {
@@ -103,43 +98,78 @@ func updateCLI() error {
 }
 
 func fetchLatestRelease() (release, error) {
+	return fetchLatestReleaseFromRedirect()
+}
+
+func fetchLatestReleaseFromRedirect() (release, error) {
 	reqCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, releaseAPIURL, nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, latestReleaseURL, nil)
 	if err != nil {
 		return release{}, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", binaryName, cmd.Version))
 
-	res, err := http.DefaultClient.Do(req)
+	client := *http.DefaultClient
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
+	res, err := client.Do(req)
 	if err != nil {
 		return release{}, err
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode < http.StatusMultipleChoices || res.StatusCode >= http.StatusBadRequest {
 		body, _ := io.ReadAll(io.LimitReader(res.Body, 4*1024))
-		return release{}, fmt.Errorf("failed to fetch latest release: status=%d body=%s", res.StatusCode, strings.TrimSpace(string(body)))
+		return release{}, fmt.Errorf("failed to fetch latest release redirect: status=%d body=%s", res.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	var rel release
-	if err := json.NewDecoder(res.Body).Decode(&rel); err != nil {
+	tagName, err := releaseTagFromLatestLocation(res.Header.Get("Location"))
+	if err != nil {
 		return release{}, err
 	}
-	if rel.TagName == "" {
-		return release{}, fmt.Errorf("latest release tag is empty")
+
+	return release{
+		TagName:         tagName,
+		DownloadBaseURL: fmt.Sprintf("https://github.com/wim-web/tnnl/releases/download/%s", url.PathEscape(tagName)),
+	}, nil
+}
+
+func releaseTagFromLatestLocation(location string) (string, error) {
+	if location == "" {
+		return "", fmt.Errorf("latest release redirect location is empty")
 	}
 
-	return rel, nil
+	u, err := url.Parse(location)
+	if err != nil {
+		return "", err
+	}
+
+	const marker = "/releases/tag/"
+	escapedPath := u.EscapedPath()
+	idx := strings.Index(escapedPath, marker)
+	if idx < 0 {
+		return "", fmt.Errorf("latest release redirect location does not contain release tag: %s", location)
+	}
+
+	rawTagName := strings.TrimPrefix(escapedPath[idx:], marker)
+	tagName, err := url.PathUnescape(rawTagName)
+	if err != nil {
+		return "", err
+	}
+	if tagName == "" {
+		return "", fmt.Errorf("latest release tag is empty")
+	}
+
+	return tagName, nil
 }
 
 func (r release) assetURL(assetName string) (string, error) {
-	for _, a := range r.Assets {
-		if a.Name == assetName {
-			return a.DownloadURL, nil
-		}
+	if r.DownloadBaseURL != "" {
+		return strings.TrimRight(r.DownloadBaseURL, "/") + "/" + url.PathEscape(assetName), nil
 	}
 
 	return "", fmt.Errorf("release asset not found: %s", assetName)
