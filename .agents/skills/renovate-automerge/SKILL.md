@@ -204,6 +204,7 @@ release tag を作ってはいけない場合:
 - マージしなかったが対応が必要な PR: PR 番号、title、理由、未マージ理由コメントの URL
 - 既に同等内容の未マージ理由コメントがある PR: comment skipped として扱い、既存コメント URL を報告
 - マージしなかったが人間確認が必要な Renovate PR には、コメント投稿の有無に関係なく `renovate-needs-manual-review` を付ける。既に同等内容の comment がある場合も、重複コメントは投稿せず label は付ける。
+- merge state の一時的な `UNKNOWN`、release tag push 後の同一 run 内追加マージ禁止、tooling の一時的な失敗など、次回 automation run で再評価すればよいだけの PR には `renovate-needs-manual-review` を付けない。既に付いている場合は外す。
 - release: 作成した tag、release workflow の結果、run URL
 - local CLI: `tnnl update` の結果、更新後の `tnnl version`
 - 対象となる Renovate PR がなかった場合: 対象なしと報告
@@ -215,6 +216,7 @@ release tag を作ってはいけない場合:
 - コメントする場合は、確認した release notes / changelog、影響範囲、マージしなかった具体理由、人間に確認してほしい点を簡潔に含める。
 - 既に同等内容の comment がある場合は、重複コメントを投稿せず comment skipped として扱い、既存コメント URL を報告する。
 - マージしなかったが人間確認が必要な Renovate PR には、コメント投稿の有無に関係なく `renovate-needs-manual-review` を付ける。既に同等内容の comment がある場合も、重複コメントは投稿せず label は付ける。
+- merge state の一時的な `UNKNOWN`、release tag push 後の同一 run 内追加マージ禁止、tooling の一時的な失敗など、次回 automation run で再評価すればよいだけの PR には `renovate-needs-manual-review` を付けない。既に付いている場合は外す。
 
 ## 禁止操作
 
