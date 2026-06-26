@@ -8,7 +8,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.4
 	github.com/aws/aws-sdk-go v1.55.8
 	github.com/aws/aws-sdk-go-v2/config v1.32.25
-	github.com/aws/aws-sdk-go-v2/service/ecs v1.83.0
+	github.com/aws/aws-sdk-go-v2/service/ecs v1.85.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.69.3
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sync v0.21.0
