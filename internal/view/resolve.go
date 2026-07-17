@@ -48,11 +48,14 @@ func ResolveTarget(
 			return resolved, false, fmt.Errorf("prepare ECS cluster choices: %w", err)
 		}
 		selected, quit, err := chooseOption(clusterChoiceTitle, options, false, choose)
+		if err != nil {
+			return resolved, false, fmt.Errorf("select ECS cluster: %w", err)
+		}
 		if quit {
 			return target.Resolved{}, true, nil
 		}
-		if err != nil {
-			return resolved, false, fmt.Errorf("select ECS cluster: %w", err)
+		if !hasOptionValue(options, selected) {
+			return resolved, false, fmt.Errorf("selected ECS cluster %q is no longer available", selected)
 		}
 		ecsCluster = selected
 	}
@@ -71,11 +74,11 @@ func ResolveTarget(
 		return resolved, false, fmt.Errorf("prepare ECS task choices: %w", err)
 	}
 	selectedTaskARN, quit, err := chooseOption(taskChoiceTitle, taskChoices, true, choose)
-	if quit {
-		return target.Resolved{}, true, nil
-	}
 	if err != nil {
 		return resolved, false, fmt.Errorf("select ECS task: %w", err)
+	}
+	if quit {
+		return target.Resolved{}, true, nil
 	}
 	selectedTask, err := taskByARN(tasks, selectedTaskARN)
 	if err != nil {
@@ -88,11 +91,11 @@ func ResolveTarget(
 		return resolved, false, fmt.Errorf("prepare ECS container choices: %w", err)
 	}
 	selectedContainerName, quit, err := chooseOption(containerChoiceTitle, containerChoices, true, choose)
-	if quit {
-		return target.Resolved{}, true, nil
-	}
 	if err != nil {
 		return resolved, false, fmt.Errorf("select ECS container: %w", err)
+	}
+	if quit {
+		return target.Resolved{}, true, nil
 	}
 	selectedContainer, err := containerByName(eligibleContainers, selectedContainerName)
 	if err != nil {
@@ -136,6 +139,15 @@ func chooseOption(title string, options []listview.Option, auto bool, choose Cho
 		return options[0].Value, false, nil
 	}
 	return choose(title, options)
+}
+
+func hasOptionValue(options []listview.Option, selected string) bool {
+	for _, option := range options {
+		if option.Value == selected {
+			return true
+		}
+	}
+	return false
 }
 
 func clusterOptions(clusters []string) ([]listview.Option, error) {

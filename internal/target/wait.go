@@ -49,6 +49,9 @@ func (r *Resolver) WaitForEligibleTasks(
 	maxWait time.Duration,
 	clock Clock,
 ) ([]types.Task, error) {
+	if maxWait < 0 {
+		return nil, fmt.Errorf("maximum wait must be non-negative: %s", maxWait)
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("wait for eligible ECS task: %w", err)
 	}
@@ -57,7 +60,7 @@ func (r *Resolver) WaitForEligibleTasks(
 	waitCtx := ctx
 	cancel := func() {}
 	if maxWait > 0 {
-		waitCtx, cancel = context.WithDeadline(ctx, deadline)
+		waitCtx, cancel = context.WithTimeout(ctx, maxWait)
 	}
 	defer cancel()
 
@@ -79,6 +82,15 @@ func (r *Resolver) WaitForEligibleTasks(
 				return nil, noEligibleTasksError(cluster, service, maxWait)
 			}
 			return nil, err
+		}
+		if parentErr := ctx.Err(); parentErr != nil {
+			return nil, fmt.Errorf("wait for eligible ECS task: %w", parentErr)
+		}
+		if maxWait > 0 && errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
+			return nil, noEligibleTasksError(cluster, service, maxWait)
+		}
+		if maxWait > 0 && !clock.Now().Before(deadline) {
+			return nil, noEligibleTasksError(cluster, service, maxWait)
 		}
 		if len(tasks) > 0 {
 			return tasks, nil

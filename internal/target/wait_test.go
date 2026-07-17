@@ -198,6 +198,27 @@ func TestWaitForEligibleTasks(t *testing.T) {
 		}
 	})
 
+	t.Run("negative wait is rejected before an API lookup", func(t *testing.T) {
+		client := &waitECS{}
+		clock := &fakeWaitClock{now: time.Now()}
+
+		_, err := NewResolver(client).WaitForEligibleTasks(context.Background(), "production", "", -time.Second, clock)
+		if err == nil {
+			t.Fatal("WaitForEligibleTasks() error = nil, want negative-wait validation error")
+		}
+		for _, fragment := range []string{"non-negative", "-1s"} {
+			if !strings.Contains(err.Error(), fragment) {
+				t.Errorf("WaitForEligibleTasks() error = %q, want fragment %q", err, fragment)
+			}
+		}
+		if calls := len(client.listContexts); calls != 0 {
+			t.Fatalf("EligibleTasks lookup count = %d, want 0", calls)
+		}
+		if len(clock.sleeps) != 0 {
+			t.Fatalf("Sleep call count = %d, want 0", len(clock.sleeps))
+		}
+	})
+
 	t.Run("already canceled parent returns context canceled without lookup", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -231,6 +252,67 @@ func TestWaitForEligibleTasks(t *testing.T) {
 		}
 	})
 
+	t.Run("parent cancellation before a ready API response wins over success", func(t *testing.T) {
+		const taskARN = "arn:aws:ecs:us-east-1:123456789012:task/production/ready"
+		ctx, cancel := context.WithCancel(context.Background())
+		client := &waitECS{
+			listTasks: func(context.Context, *ecs.ListTasksInput, int) (*ecs.ListTasksOutput, error) {
+				return &ecs.ListTasksOutput{TaskArns: []string{taskARN}}, nil
+			},
+			describeTasks: func(_ context.Context, _ *ecs.DescribeTasksInput, _ int) (*ecs.DescribeTasksOutput, error) {
+				cancel()
+				return &ecs.DescribeTasksOutput{Tasks: []types.Task{waitReadyTask(taskARN)}}, nil
+			},
+		}
+		clock := &fakeWaitClock{now: time.Now()}
+
+		got, err := NewResolver(client).WaitForEligibleTasks(ctx, "production", "", 5*time.Second, clock)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("WaitForEligibleTasks() = (%#v, %v), want errors.Is(context.Canceled)", got, err)
+		}
+	})
+
+	t.Run("child deadline before a ready API response wins over success", func(t *testing.T) {
+		const taskARN = "arn:aws:ecs:us-east-1:123456789012:task/production/ready"
+		client := &waitECS{
+			listTasks: func(context.Context, *ecs.ListTasksInput, int) (*ecs.ListTasksOutput, error) {
+				return &ecs.ListTasksOutput{TaskArns: []string{taskARN}}, nil
+			},
+			describeTasks: func(ctx context.Context, _ *ecs.DescribeTasksInput, _ int) (*ecs.DescribeTasksOutput, error) {
+				<-ctx.Done()
+				return &ecs.DescribeTasksOutput{Tasks: []types.Task{waitReadyTask(taskARN)}}, nil
+			},
+		}
+		clock := &fakeWaitClock{now: time.Now()}
+
+		got, err := NewResolver(client).WaitForEligibleTasks(context.Background(), "production", "", 20*time.Millisecond, clock)
+		if len(got) != 0 {
+			t.Fatalf("WaitForEligibleTasks() returned %d tasks after deadline, want none", len(got))
+		}
+		assertNoEligibleTasksError(t, err, "production", "20ms", "eligible", "ready")
+	})
+
+	t.Run("fake deadline before a ready API response wins over success", func(t *testing.T) {
+		const taskARN = "arn:aws:ecs:us-east-1:123456789012:task/production/ready"
+		maxWait := 5 * time.Second
+		clock := &fakeWaitClock{now: time.Now()}
+		client := &waitECS{
+			listTasks: func(context.Context, *ecs.ListTasksInput, int) (*ecs.ListTasksOutput, error) {
+				return &ecs.ListTasksOutput{TaskArns: []string{taskARN}}, nil
+			},
+			describeTasks: func(_ context.Context, _ *ecs.DescribeTasksInput, _ int) (*ecs.DescribeTasksOutput, error) {
+				clock.now = clock.now.Add(maxWait)
+				return &ecs.DescribeTasksOutput{Tasks: []types.Task{waitReadyTask(taskARN)}}, nil
+			},
+		}
+
+		got, err := NewResolver(client).WaitForEligibleTasks(context.Background(), "production", "", maxWait, clock)
+		if len(got) != 0 {
+			t.Fatalf("WaitForEligibleTasks() returned %d tasks after fake deadline, want none", len(got))
+		}
+		assertNoEligibleTasksError(t, err, "production", "5s", "eligible", "ready")
+	})
+
 	t.Run("sleep reaching the deadline prevents another lookup", func(t *testing.T) {
 		client := &waitECS{}
 		clock := &fakeWaitClock{now: time.Now()}
@@ -245,21 +327,34 @@ func TestWaitForEligibleTasks(t *testing.T) {
 		}
 	})
 
-	t.Run("positive wait bounds API calls with the requested deadline", func(t *testing.T) {
+	t.Run("positive wait uses a real API timeout independent of the fake clock epoch", func(t *testing.T) {
 		const taskARN = "arn:aws:ecs:us-east-1:123456789012:task/production/ready"
-		start := time.Now()
 		maxWait := 5 * time.Second
 		client := &waitECS{
-			listTasks: func(context.Context, *ecs.ListTasksInput, int) (*ecs.ListTasksOutput, error) {
+			listTasks: func(ctx context.Context, _ *ecs.ListTasksInput, _ int) (*ecs.ListTasksOutput, error) {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				return &ecs.ListTasksOutput{TaskArns: []string{taskARN}}, nil
 			},
+			describeTasks: func(ctx context.Context, _ *ecs.DescribeTasksInput, _ int) (*ecs.DescribeTasksOutput, error) {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+				return &ecs.DescribeTasksOutput{Tasks: []types.Task{waitReadyTask(taskARN)}}, nil
+			},
 		}
-		clock := &fakeWaitClock{now: start}
+		clock := &fakeWaitClock{now: time.Unix(123, 0)}
 		ctx := context.Background()
 
-		_, err := NewResolver(client).WaitForEligibleTasks(ctx, "production", "", maxWait, clock)
+		before := time.Now()
+		got, err := NewResolver(client).WaitForEligibleTasks(ctx, "production", "", maxWait, clock)
+		after := time.Now()
 		if err != nil {
 			t.Fatalf("WaitForEligibleTasks() error = %v", err)
+		}
+		if gotARN := aws.ToString(got[0].TaskArn); gotARN != taskARN {
+			t.Fatalf("WaitForEligibleTasks() task ARN = %q, want %q", gotARN, taskARN)
 		}
 		if calls := len(client.listContexts); calls != 1 {
 			t.Fatalf("EligibleTasks lookup count = %d, want 1", calls)
@@ -268,11 +363,11 @@ func TestWaitForEligibleTasks(t *testing.T) {
 		if !ok {
 			t.Fatal("positive-wait API context has no deadline")
 		}
-		if deadline.After(start.Add(maxWait)) {
-			t.Fatalf("API context deadline = %v, later than requested maximum %v", deadline, start.Add(maxWait))
+		if deadline.Before(before.Add(maxWait)) {
+			t.Fatalf("API context deadline = %v, earlier than lower bound %v", deadline, before.Add(maxWait))
 		}
-		if !deadline.After(start) {
-			t.Fatalf("API context deadline = %v, want after start %v", deadline, start)
+		if deadline.After(after.Add(maxWait)) {
+			t.Fatalf("API context deadline = %v, later than upper bound %v", deadline, after.Add(maxWait))
 		}
 	})
 }

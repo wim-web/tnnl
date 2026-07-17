@@ -152,6 +152,46 @@ func TestResolveTargetWaitsAfterClusterResolution(t *testing.T) {
 	}
 }
 
+func TestResolveTargetRejectsUnofferedClusterChoice(t *testing.T) {
+	tests := []struct {
+		name     string
+		selected string
+	}{
+		{
+			name:     "valid unoffered ARN",
+			selected: "arn:aws:ecs:us-east-1:123456789012:cluster/unoffered",
+		},
+		{
+			name:     "valid label instead of option value",
+			selected: "production",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver := &fakeTargetResolver{
+				clusters: []string{viewClusterARN},
+				tasks:    []types.Task{viewReadyTask(viewFirstARN, "service:payments", viewReadyContainer("app", "runtime"))},
+			}
+			choose := func(title string, options []listview.Option) (string, bool, error) {
+				if !strings.Contains(strings.ToLower(title), "cluster") {
+					t.Fatalf("chooser title = %q, want cluster title", title)
+				}
+				if want := []listview.Option{{Label: "production", Value: viewClusterARN}}; !reflect.DeepEqual(options, want) {
+					t.Fatalf("cluster options = %#v, want %#v", options, want)
+				}
+				return tt.selected, false, nil
+			}
+
+			got, quit, err := ResolveTarget(context.Background(), resolver, choose, "", "", 0)
+			assertResolveError(t, got, quit, err, "cluster", tt.selected, "no longer available")
+			if wantCalls := []string{"clusters"}; !reflect.DeepEqual(resolver.calls, wantCalls) {
+				t.Fatalf("resolver calls = %v, want %v with no wait for unoffered cluster", resolver.calls, wantCalls)
+			}
+		})
+	}
+}
+
 func TestResolveTargetRejectsEmptyResourcesBeforeChooser(t *testing.T) {
 	t.Run("no clusters", func(t *testing.T) {
 		resolver := &fakeTargetResolver{}
@@ -333,6 +373,72 @@ func TestResolveTargetUserCancellation(t *testing.T) {
 			}
 			if tt.wantTitle == "cluster" && len(tt.resolver.calls) != 1 {
 				t.Fatalf("resolver calls after cluster cancellation = %v, want no wait call", tt.resolver.calls)
+			}
+		})
+	}
+}
+
+func TestResolveTargetChooserErrorWinsOverCancellation(t *testing.T) {
+	tests := []struct {
+		name         string
+		resolver     *fakeTargetResolver
+		inputCluster string
+		wantResource string
+	}{
+		{
+			name:         "cluster chooser",
+			resolver:     &fakeTargetResolver{clusters: []string{viewClusterARN}},
+			inputCluster: "",
+			wantResource: "cluster",
+		},
+		{
+			name: "task chooser",
+			resolver: &fakeTargetResolver{tasks: []types.Task{
+				viewReadyTask(viewFirstARN, "service:payments", viewReadyContainer("app", "runtime-first")),
+				viewReadyTask(viewSecondARN, "service:payments", viewReadyContainer("app", "runtime-second")),
+			}},
+			inputCluster: "production",
+			wantResource: "task",
+		},
+		{
+			name: "container chooser",
+			resolver: &fakeTargetResolver{tasks: []types.Task{
+				viewReadyTask(
+					viewFirstARN,
+					"service:payments",
+					viewReadyContainer("web", "runtime-web"),
+					viewReadyContainer("worker", "runtime-worker"),
+				),
+			}},
+			inputCluster: "production",
+			wantResource: "container",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chooseErr := errors.New("chooser quit-error sentinel")
+			chooseCalls := 0
+			choose := func(title string, _ []listview.Option) (string, bool, error) {
+				chooseCalls++
+				if !strings.Contains(strings.ToLower(title), tt.wantResource) {
+					t.Fatalf("chooser title = %q, want %q resource", title, tt.wantResource)
+				}
+				return "ignored", true, chooseErr
+			}
+
+			got, quit, err := ResolveTarget(context.Background(), tt.resolver, choose, tt.inputCluster, "", 0)
+			assertResolveError(t, got, quit, err, tt.wantResource)
+			if !errors.Is(err, chooseErr) {
+				t.Fatalf("ResolveTarget() error = %v, want errors.Is(chooser sentinel)", err)
+			}
+			if chooseCalls != 1 {
+				t.Fatalf("chooser call count = %d, want 1", chooseCalls)
+			}
+			if tt.wantResource == "cluster" {
+				if wantCalls := []string{"clusters"}; !reflect.DeepEqual(tt.resolver.calls, wantCalls) {
+					t.Fatalf("resolver calls after cluster chooser error = %v, want %v", tt.resolver.calls, wantCalls)
+				}
 			}
 		})
 	}
