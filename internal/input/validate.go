@@ -15,7 +15,16 @@ func validatePort(name, value string, required bool) error {
 		return nil
 	}
 
-	n, err := strconv.Atoi(value)
+	for i := 0; i < len(value); i++ {
+		if value[i] < '0' || value[i] > '9' {
+			return fmt.Errorf("%s must be a decimal integer: %q", name, value)
+		}
+	}
+
+	n, err := strconv.ParseUint(value, 10, 64)
+	if errors.Is(err, strconv.ErrRange) {
+		return fmt.Errorf("%s must be between 1 and 65535: %q", name, value)
+	}
 	if err != nil {
 		return fmt.Errorf("%s must be a decimal integer: %q", name, value)
 	}

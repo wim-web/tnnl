@@ -32,9 +32,14 @@ func TestValidatePortForward(t *testing.T) {
 			wantErr: "target port must be between 1 and 65535",
 		},
 		{
-			name:    "negative signed target",
+			name:    "negative-sign target",
 			input:   PortForwardInput{TargetPortNumber: "-1"},
-			wantErr: "target port must be between 1 and 65535",
+			wantErr: "target port must be a decimal integer",
+		},
+		{
+			name:    "positive-sign target",
+			input:   PortForwardInput{TargetPortNumber: "+80"},
+			wantErr: "target port must be a decimal integer",
 		},
 		{
 			name:    "malformed signed target",
@@ -50,6 +55,11 @@ func TestValidatePortForward(t *testing.T) {
 			name:    "fractional target",
 			input:   PortForwardInput{TargetPortNumber: "80.5"},
 			wantErr: "target port must be a decimal integer",
+		},
+		{
+			name:    "digit-only overflow",
+			input:   PortForwardInput{TargetPortNumber: strings.Repeat("9", 100)},
+			wantErr: "target port must be between 1 and 65535",
 		},
 		{
 			name:    "local below range",
