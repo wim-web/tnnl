@@ -93,6 +93,25 @@ func TestPortforwardCommandPreservesExplicitEmptyLocalPort(t *testing.T) {
 	}
 }
 
+func TestPortforwardCommandPassesExecuteContextToRunner(t *testing.T) {
+	type contextKey struct{}
+	want := "portforward context value"
+	ctx := context.WithValue(context.Background(), contextKey{}, want)
+	var got any
+	command := newPortforwardCommand(func(ctx context.Context, _ input.PortForwardInput) error {
+		got = ctx.Value(contextKey{})
+		return nil
+	})
+	command.SetArgs([]string{"--target-port", "80"})
+
+	if err := command.ExecuteContext(ctx); err != nil {
+		t.Fatalf("ExecuteContext() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("runner context value = %#v, want %#v", got, want)
+	}
+}
+
 func TestPortforwardCommandInvalidExplicitFlagDoesNotInvokeRunner(t *testing.T) {
 	path := writePortforwardFixture(t, `{"target_port_number":"80","local_port_number":"8080"}`)
 	tests := []struct {

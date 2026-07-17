@@ -121,6 +121,25 @@ func TestRemotePortforwardCommandAllExplicitFlagsOverrideFile(t *testing.T) {
 	}
 }
 
+func TestRemotePortforwardCommandPassesExecuteContextToRunner(t *testing.T) {
+	type contextKey struct{}
+	want := "remote portforward context value"
+	ctx := context.WithValue(context.Background(), contextKey{}, want)
+	var got any
+	command := newRemotePortforwardCommand(func(ctx context.Context, _ input.RemotePortForwardInput) error {
+		got = ctx.Value(contextKey{})
+		return nil
+	})
+	command.SetArgs([]string{"--remote-port", "22", "--host", "example.com"})
+
+	if err := command.ExecuteContext(ctx); err != nil {
+		t.Fatalf("ExecuteContext() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("runner context value = %#v, want %#v", got, want)
+	}
+}
+
 func TestRemotePortforwardCommandInvalidRequiredValueDoesNotInvokeRunner(t *testing.T) {
 	path := writeRemotePortforwardFixture(t, `{
 		"remote_port_number":"22",
