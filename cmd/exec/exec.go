@@ -1,8 +1,7 @@
 package exec
 
 import (
-	"fmt"
-	"log"
+	"context"
 
 	"github.com/spf13/cobra"
 	"github.com/wim-web/tnnl/cmd"
@@ -14,57 +13,49 @@ var cmdName = "command"
 var waitName = "wait"
 var inputFileName = "input-file"
 
-var ExecCmd = &cobra.Command{
-	Use:   "exec",
-	Short: "like ecs execute-command",
-	Run: func(cmd *cobra.Command, args []string) {
-		var execInput input.ExecInput
+type execRunner func(context.Context, input.ExecInput) error
 
-		inputFile, err := cmd.Flags().GetString(inputFileName)
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		if inputFile != "" {
-			if err := input.ReadInputFile(&execInput, inputFile); err != nil {
-				log.Fatalln(err)
-			}
-		}
-
-		if execInput.Cmd == "" {
-			command, err := cmd.Flags().GetString(cmdName)
+func newExecCommand(run execRunner) *cobra.Command {
+	c := &cobra.Command{
+		Use:   "exec",
+		Short: "Run an interactive command in an ECS container",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, err := cmd.Flags().GetString(inputFileName)
 			if err != nil {
-				log.Fatalln(err)
+				return err
 			}
 
-			execInput.Cmd = command
-		}
+			overrides := input.ExecOverrides{}
+			if cmd.Flags().Changed(cmdName) {
+				value, err := cmd.Flags().GetString(cmdName)
+				if err != nil {
+					return err
+				}
+				overrides.Command = &value
+			}
+			if cmd.Flags().Changed(waitName) {
+				value, err := cmd.Flags().GetInt(waitName)
+				if err != nil {
+					return err
+				}
+				overrides.Wait = &value
+			}
 
-		if execInput.Wait == 0 {
-			wait, err := cmd.Flags().GetInt("wait")
+			resolved, err := input.ResolveExec(path, overrides)
 			if err != nil {
-				log.Fatalln(err)
+				return err
 			}
-
-			execInput.Wait = wait
-		}
-
-		err = handler.ExecHandler(execInput)
-		if err != nil {
-			log.Fatalln(err)
-		}
-	},
+			return run(cmd.Context(), resolved)
+		},
+	}
+	c.Flags().String(cmdName, "sh", "command to run (default: sh)")
+	c.Flags().Int(waitName, 0, "seconds to wait for an eligible task")
+	c.Flags().String(inputFileName, "", "input JSON; generate with `tnnl exec make-input-file`")
+	return c
 }
+
+var ExecCmd = newExecCommand(handler.ExecHandler)
 
 func init() {
 	cmd.RootCmd.AddCommand(ExecCmd)
-
-	commandDefault := "sh"
-	ExecCmd.Flags().String(cmdName, commandDefault, fmt.Sprintf("exec command(default: %s)", commandDefault))
-
-	waitDefault := 0
-	ExecCmd.Flags().Int(waitName, waitDefault, fmt.Sprintf("the number of seconds to wait for task to launch(default: %v)", waitDefault))
-
-	inputFileDefault := ""
-	ExecCmd.Flags().String(inputFileName, inputFileDefault, "input file path\nyou can make file, using exec make-input-file")
 }

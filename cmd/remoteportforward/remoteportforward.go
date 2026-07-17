@@ -1,16 +1,12 @@
 package remoteportforward
 
 import (
-	"fmt"
-	"log"
-	"strconv"
-	"strings"
+	"context"
 
 	"github.com/spf13/cobra"
 	"github.com/wim-web/tnnl/cmd"
 	"github.com/wim-web/tnnl/internal/handler"
 	"github.com/wim-web/tnnl/internal/input"
-	"github.com/wim-web/tnnl/pkg/port"
 )
 
 var localPortName = "local-port"
@@ -18,91 +14,57 @@ var remotePortName = "remote-port"
 var hostName = "host"
 var inputFileName = "input-file"
 
-var RemoteportforwardCmd = &cobra.Command{
-	Use:   "remoteportforward",
-	Short: "like start-session --document-name AWS-StartPortForwardingSessionToRemote",
-	Run: func(cmd *cobra.Command, args []string) {
-		var remotePortforwardInput input.RemotePortForwardInput
+type remotePortforwardRunner func(context.Context, input.RemotePortForwardInput) error
 
-		inputFile, err := cmd.Flags().GetString(inputFileName)
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		if inputFile != "" {
-			if err := input.ReadInputFile(&remotePortforwardInput, inputFile); err != nil {
-				log.Fatalln(err)
-			}
-		}
-
-		if remotePortforwardInput.RemotePortNumber == "" {
-			remote, err := cmd.Flags().GetString("remote-port")
+func newRemotePortforwardCommand(run remotePortforwardRunner) *cobra.Command {
+	c := &cobra.Command{
+		Use:   "remoteportforward",
+		Short: "Forward a local port through an ECS container to a remote host",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, err := cmd.Flags().GetString(inputFileName)
 			if err != nil {
-				log.Fatalln(err)
+				return err
 			}
 
-			remotePortforwardInput.RemotePortNumber = remote
-		}
-
-		if remotePortforwardInput.LocalPortNumber == "" {
-			local, err := cmd.Flags().GetString("local-port")
-			if err != nil {
-				log.Fatalln(err)
-			}
-
-			if local == "" {
-				l, err := port.AvailablePort()
+			overrides := input.RemotePortForwardOverrides{}
+			if cmd.Flags().Changed(remotePortName) {
+				value, err := cmd.Flags().GetString(remotePortName)
 				if err != nil {
-					log.Fatalln(err)
+					return err
 				}
-				local = strconv.Itoa(l)
+				overrides.RemotePort = &value
+			}
+			if cmd.Flags().Changed(localPortName) {
+				value, err := cmd.Flags().GetString(localPortName)
+				if err != nil {
+					return err
+				}
+				overrides.LocalPort = &value
+			}
+			if cmd.Flags().Changed(hostName) {
+				value, err := cmd.Flags().GetString(hostName)
+				if err != nil {
+					return err
+				}
+				overrides.Host = &value
 			}
 
-			remotePortforwardInput.LocalPortNumber = local
-		}
-
-		if remotePortforwardInput.Host == "" {
-			host, err := cmd.Flags().GetString("host")
+			resolved, err := input.ResolveRemotePortForward(path, overrides)
 			if err != nil {
-				log.Fatalln(err)
+				return err
 			}
-
-			remotePortforwardInput.Host = host
-		}
-
-		errorMsgs := validateInput(remotePortforwardInput)
-		if len(errorMsgs) != 0 {
-			log.Fatalln(strings.Join(errorMsgs, "\n"))
-		}
-
-		err = handler.RemotePortforwardHandler(remotePortforwardInput)
-		if err != nil {
-			log.Fatalln(err)
-		}
-	},
+			return run(cmd.Context(), resolved)
+		},
+	}
+	c.Flags().StringP(localPortName, "l", "", "local port (leave empty for automatic assignment)")
+	c.Flags().StringP(remotePortName, "r", "", "remote port")
+	c.Flags().String(hostName, "", "remote host")
+	c.Flags().String(inputFileName, "", "input JSON; generate with `tnnl remoteportforward make-input-file`")
+	return c
 }
 
-func validateInput(input input.RemotePortForwardInput) (errorMsgs []string) {
-	if input.RemotePortNumber == "" {
-		errorMsgs = append(errorMsgs, fmt.Sprintf("%s is required", remotePortName))
-	}
-
-	if input.Host == "" {
-		errorMsgs = append(errorMsgs, fmt.Sprintf("%s is required", hostName))
-	}
-
-	return errorMsgs
-}
+var RemoteportforwardCmd = newRemotePortforwardCommand(handler.RemotePortforwardHandler)
 
 func init() {
 	cmd.RootCmd.AddCommand(RemoteportforwardCmd)
-
-	RemoteportforwardCmd.Flags().StringP(localPortName, "l", "", "local port. if not specify, auto assigned")
-
-	RemoteportforwardCmd.Flags().StringP(remotePortName, "r", "", "remote port")
-
-	RemoteportforwardCmd.Flags().String(hostName, "", "host")
-
-	inputFileDefault := ""
-	RemoteportforwardCmd.Flags().String(inputFileName, inputFileDefault, "input file path\nyou can make file, using exec make-input-file")
 }

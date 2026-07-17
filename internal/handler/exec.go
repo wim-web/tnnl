@@ -13,8 +13,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func ExecHandler(input input.ExecInput) error {
-	cfg, err := config.LoadDefaultConfig(context.Background())
+func ExecHandler(ctx context.Context, input input.ExecInput) error {
+	cfg, err := config.LoadDefaultConfig(ctx)
 
 	if err != nil {
 		return err
@@ -32,12 +32,12 @@ func ExecHandler(input input.ExecInput) error {
 	}
 
 	if input.Wait > 0 {
-		eg, ctx := errgroup.WithContext(context.Background())
-		ctx, cancel := context.WithCancel(ctx)
+		eg, waitCtx := errgroup.WithContext(ctx)
+		waitCtx, cancel := context.WithCancel(waitCtx)
 
 		eg.Go(func() error {
 			err := ecs.NewTasksRunningWaiter(ecsService).Wait(
-				ctx,
+				waitCtx,
 				&ecs.DescribeTasksInput{
 					Cluster: &cluster,
 					Tasks:   []string{*task.TaskArn},
@@ -57,7 +57,7 @@ func ExecHandler(input input.ExecInput) error {
 
 			for {
 				select {
-				case <-ctx.Done():
+				case <-waitCtx.Done():
 					return nil
 				case <-ticker.C:
 					fmt.Printf(".")
@@ -71,7 +71,7 @@ func ExecHandler(input input.ExecInput) error {
 	}
 
 	exeCmd, err := command.ExecCommand(
-		context.Background(),
+		ctx,
 		ecsService,
 		cluster,
 		*task.TaskArn,

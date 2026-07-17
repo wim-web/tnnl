@@ -12,27 +12,27 @@ import (
 	"github.com/wim-web/tnnl/pkg/command"
 )
 
-func PortforwardHandler(input input.PortForwardInput) error {
+func PortforwardHandler(ctx context.Context, input input.PortForwardInput) error {
 	params := map[string][]string{
 		"portNumber":      {input.TargetPortNumber},
 		"localPortNumber": {input.LocalPortNumber},
 	}
 
-	return portforwardHandler(command.PORT_FORWARD_DOCUMENT_NAME, params, input.EcsParameter)
+	return portforwardHandler(ctx, command.PORT_FORWARD_DOCUMENT_NAME, params, input.EcsParameter)
 }
 
-func RemotePortforwardHandler(input input.RemotePortForwardInput) error {
+func RemotePortforwardHandler(ctx context.Context, input input.RemotePortForwardInput) error {
 	params := map[string][]string{
 		"portNumber":      {input.RemotePortNumber},
 		"localPortNumber": {input.LocalPortNumber},
 		"host":            {input.Host},
 	}
 
-	return portforwardHandler(command.REMOTE_PORT_FORWARD_DOCUMENT_NAME, params, input.EcsParameter)
+	return portforwardHandler(ctx, command.REMOTE_PORT_FORWARD_DOCUMENT_NAME, params, input.EcsParameter)
 }
 
-func portforwardHandler(doc command.DocumentName, params map[string][]string, ecsParam input.EcsParameter) error {
-	cfg, err := config.LoadDefaultConfig(context.Background())
+func portforwardHandler(ctx context.Context, doc command.DocumentName, params map[string][]string, ecsParam input.EcsParameter) error {
+	cfg, err := config.LoadDefaultConfig(ctx)
 
 	if err != nil {
 		return err
@@ -53,7 +53,7 @@ func portforwardHandler(doc command.DocumentName, params map[string][]string, ec
 	taskId := strings.Split(*task.TaskArn, "/")[2]
 
 	cmd, err := command.PortForwardCommand(
-		context.Background(),
+		ctx,
 		ssmService,
 		cluster,
 		taskId,

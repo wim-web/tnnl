@@ -1,92 +1,61 @@
 package portforward
 
 import (
-	"fmt"
-	"log"
-	"strconv"
-	"strings"
+	"context"
 
 	"github.com/spf13/cobra"
 	"github.com/wim-web/tnnl/cmd"
 	"github.com/wim-web/tnnl/internal/handler"
 	"github.com/wim-web/tnnl/internal/input"
-	"github.com/wim-web/tnnl/pkg/port"
 )
 
 var localPortName = "local-port"
 var targetPortName = "target-port"
 var inputFileName = "input-file"
 
-var PortforwardCmd = &cobra.Command{
-	Use:   "portforward",
-	Short: "like start-session --document-name AWS-StartPortForwardingSession",
-	Run: func(cmd *cobra.Command, args []string) {
-		var portforwardInput input.PortForwardInput
+type portforwardRunner func(context.Context, input.PortForwardInput) error
 
-		inputFile, err := cmd.Flags().GetString(inputFileName)
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		if inputFile != "" {
-			if err := input.ReadInputFile(&portforwardInput, inputFile); err != nil {
-				log.Fatalln(err)
-			}
-		}
-
-		if portforwardInput.LocalPortNumber == "" {
-			local, err := cmd.Flags().GetString(localPortName)
+func newPortforwardCommand(run portforwardRunner) *cobra.Command {
+	c := &cobra.Command{
+		Use:   "portforward",
+		Short: "Forward a local port to an ECS container",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path, err := cmd.Flags().GetString(inputFileName)
 			if err != nil {
-				log.Fatalln(err)
+				return err
 			}
 
-			if local == "" {
-				l, err := port.AvailablePort()
+			overrides := input.PortForwardOverrides{}
+			if cmd.Flags().Changed(targetPortName) {
+				value, err := cmd.Flags().GetString(targetPortName)
 				if err != nil {
-					log.Fatalln(err)
+					return err
 				}
-				local = strconv.Itoa(l)
+				overrides.TargetPort = &value
+			}
+			if cmd.Flags().Changed(localPortName) {
+				value, err := cmd.Flags().GetString(localPortName)
+				if err != nil {
+					return err
+				}
+				overrides.LocalPort = &value
 			}
 
-			portforwardInput.LocalPortNumber = local
-		}
-
-		if portforwardInput.TargetPortNumber == "" {
-			target, err := cmd.Flags().GetString(targetPortName)
+			resolved, err := input.ResolvePortForward(path, overrides)
 			if err != nil {
-				log.Fatalln(err)
+				return err
 			}
-
-			portforwardInput.TargetPortNumber = target
-		}
-
-		errorMsgs := validateInput(portforwardInput)
-		if len(errorMsgs) != 0 {
-			log.Fatalln(strings.Join(errorMsgs, "\n"))
-		}
-
-		err = handler.PortforwardHandler(portforwardInput)
-		if err != nil {
-			log.Fatalln(err)
-		}
-	},
-}
-
-func validateInput(input input.PortForwardInput) (errorMsgs []string) {
-	if input.TargetPortNumber == "" {
-		errorMsgs = append(errorMsgs, fmt.Sprintf("%s is required", targetPortName))
+			return run(cmd.Context(), resolved)
+		},
 	}
-
-	return errorMsgs
+	c.Flags().StringP(localPortName, "l", "", "local port (leave empty for automatic assignment)")
+	c.Flags().StringP(targetPortName, "t", "", "target port")
+	c.Flags().String(inputFileName, "", "input JSON; generate with `tnnl portforward make-input-file`")
+	return c
 }
+
+var PortforwardCmd = newPortforwardCommand(handler.PortforwardHandler)
 
 func init() {
 	cmd.RootCmd.AddCommand(PortforwardCmd)
-
-	PortforwardCmd.Flags().StringP(localPortName, "l", "", "local port. if not specify, auto assigned")
-
-	PortforwardCmd.Flags().StringP(targetPortName, "t", "", "target port")
-
-	inputFileDefault := ""
-	PortforwardCmd.Flags().String(inputFileName, inputFileDefault, "input file path\nyou can make file, using exec make-input-file")
 }
