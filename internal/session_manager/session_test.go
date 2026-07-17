@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -22,6 +23,9 @@ const (
 	helperModeFailure   = "failure"
 	helperModeBlock     = "block"
 	helperModeMarkStart = "mark-start"
+
+	helperSynchronizationLimit = 5 * time.Second
+	helperPollInterval         = 10 * time.Millisecond
 )
 
 func TestMain(m *testing.M) {
@@ -433,10 +437,8 @@ func TestRunnerRunPreservesCancellation(t *testing.T) {
 	t.Setenv(helperModeEnv, helperModeBlock)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	timer := time.AfterFunc(20*time.Millisecond, cancel)
-	defer timer.Stop()
 
-	err = (&Runner{path: executable}).Run(ctx, validInvocation())
+	err = runRunnerAfterHelperStarts(t, executable, ctx, cancel)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Run() error = %v, want errors.Is(Canceled)", err)
 	}
@@ -449,10 +451,10 @@ func TestRunnerRunPreservesDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(helperModeEnv, helperModeBlock)
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
+	ctx := newManualDeadlineContext(context.Background())
+	defer ctx.expire()
 
-	err = (&Runner{path: executable}).Run(ctx, validInvocation())
+	err = runRunnerAfterHelperStarts(t, executable, ctx, ctx.expire)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Run() error = %v, want errors.Is(DeadlineExceeded)", err)
 	}
@@ -468,6 +470,96 @@ func assertWrappedProcessError(t *testing.T, err error) {
 	if !errors.As(err, &exitErr) {
 		t.Fatalf("error = %v, want wrapped *exec.ExitError", err)
 	}
+}
+
+func runRunnerAfterHelperStarts(
+	t *testing.T,
+	executable string,
+	ctx context.Context,
+	endContext func(),
+) error {
+	t.Helper()
+	startedFile := t.TempDir() + "/started"
+	t.Setenv(helperStartedEnv, startedFile)
+	t.Cleanup(endContext)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- (&Runner{path: executable}).Run(ctx, validInvocation())
+	}()
+
+	startedErr := waitForHelperStarted(startedFile, helperSynchronizationLimit)
+	endContext()
+	runErr := receiveRunnerError(t, errCh, helperSynchronizationLimit)
+	if startedErr != nil {
+		t.Fatalf("wait for helper process: %v; Run() error = %v", startedErr, runErr)
+	}
+	return runErr
+}
+
+func waitForHelperStarted(path string, limit time.Duration) error {
+	timeout := time.NewTimer(limit)
+	defer timeout.Stop()
+	ticker := time.NewTicker(helperPollInterval)
+	defer ticker.Stop()
+
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("inspect helper start notification: %w", err)
+		}
+
+		select {
+		case <-ticker.C:
+		case <-timeout.C:
+			return fmt.Errorf("timed out after %s", limit)
+		}
+	}
+}
+
+func receiveRunnerError(t *testing.T, errCh <-chan error, limit time.Duration) error {
+	t.Helper()
+	timeout := time.NewTimer(limit)
+	defer timeout.Stop()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-timeout.C:
+		t.Fatalf("timed out after %s waiting for Runner.Run", limit)
+		return nil
+	}
+}
+
+type manualDeadlineContext struct {
+	context.Context
+	done chan struct{}
+	once sync.Once
+}
+
+func newManualDeadlineContext(parent context.Context) *manualDeadlineContext {
+	return &manualDeadlineContext{
+		Context: parent,
+		done:    make(chan struct{}),
+	}
+}
+
+func (c *manualDeadlineContext) Done() <-chan struct{} {
+	return c.done
+}
+
+func (c *manualDeadlineContext) Err() error {
+	select {
+	case <-c.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+func (c *manualDeadlineContext) expire() {
+	c.once.Do(func() { close(c.done) })
 }
 
 type commandFunc func() ([]byte, error)
