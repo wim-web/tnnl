@@ -108,12 +108,12 @@ A task is eligible when all of the following are true:
 - `LastStatus` is `RUNNING`.
 - It has at least one container eligible for the requested operation.
 
-An exec-eligible container has a non-empty name, `LastStatus == RUNNING`, and a
-managed agent named `ExecuteCommandAgent` whose `LastStatus` is `RUNNING`.
-
-A port-forward-eligible container satisfies the exec requirements and also has
-a non-empty runtime ID. Runtime ID is required because the ECS Session Manager
-target includes it.
+An eligible container has a non-empty name, `LastStatus == RUNNING`, a managed
+agent named `ExecuteCommandAgent` whose `LastStatus` is `RUNNING`, and a
+non-empty runtime ID. Runtime ID is required for all three commands because the
+full Session Manager plugin request identifies the target as
+`ecs:<cluster>_<task>_<runtime>`; the AWS CLI also re-describes the selected ECS
+task to obtain this value for `execute-command`.
 
 Pointer fields are validated before dereference. Task and cluster identifiers
 are parsed through helpers that accept both long and short ECS ARN forms and
@@ -180,16 +180,24 @@ the plugin; no new CLI setting is introduced. An endpoint override is forwarded
 from the standard AWS endpoint environment variables when present. Empty
 values allow the plugin and SDK to use their normal defaults.
 
+After ExecuteCommand creates an ECS Exec session, tnnl follows the AWS CLI
+sequence and re-describes the task identified by the ExecuteCommand response.
+It finds the returned container name and builds the plugin Target from that
+latest runtime ID. A DescribeTasks error, partial failure, missing container, or
+missing runtime ID is treated as a post-creation handoff failure and triggers
+the same remote-session cleanup described below.
+
 ### Session lifecycle
 
 ExecuteCommand and StartSession return a typed local session containing the
 session ID, plugin request, and a cleanup function. The handler then runs the
 plugin.
 
-If plugin creation or execution fails after the remote session was created,
-the handler performs a best-effort SSM TerminateSession call with a short,
-independent cleanup timeout. The original plugin error remains primary; a
-cleanup error is joined with it. Cancellation follows the same cleanup path.
+If response validation, the post-ExecuteCommand runtime refresh, plugin
+creation, or plugin execution fails after the remote session was created, the
+handler performs a best-effort SSM TerminateSession call with a short,
+independent cleanup timeout. The original error remains primary; a cleanup
+error is joined with it. Cancellation follows the same cleanup path.
 
 The AWS API call uses the caller context. Plugin execution uses that context as
 well, so process termination and remote cleanup follow a single lifecycle.
@@ -248,7 +256,8 @@ implementation.
   fields.
 - Identifier parsing covers short and long task ARNs and malformed values.
 - Eligibility covers pending tasks, disabled Execute Command, stopped
-  containers, missing or stopped agents, and missing runtime IDs.
+  containers, missing or stopped agents, and missing runtime IDs for every
+  session command.
 - Typed list options prove the second duplicate-group task resolves to its own
   ARN and an empty list never enters Bubble Tea.
 - Wait tests use a fake clock or injected polling function and cover success,
@@ -259,6 +268,9 @@ implementation.
   profile and endpoint values.
 - Session lifecycle tests assert TerminateSession on plugin failure and no
   remote API call when preflight fails.
+- ECS Exec lifecycle tests assert that ExecuteCommand is followed by
+  DescribeTasks, the refreshed runtime ID is used in Target, and refresh
+  failures terminate the newly created session.
 - Updater tests cover checksum match, checksum mismatch, candidate version
   mismatch, unique temporary files, and successful atomic replacement.
 - Version tests cover linker, module, and development fallbacks.
