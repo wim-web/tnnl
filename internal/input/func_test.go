@@ -1,205 +1,121 @@
 package input
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestMakeInputFile(t *testing.T) {
+func TestReadInputFileStrict(t *testing.T) {
 	tests := []struct {
-		name     string
-		skelton  any
-		filename string
-		want     string
+		name    string
+		content string
+		wantErr string
 	}{
 		{
-			name: "simple struct",
-			skelton: struct {
-				Name  string `json:"name"`
-				Value int    `json:"value"`
-			}{
-				Name:  "test",
-				Value: 123,
-			},
-			filename: "test_simple.json",
-			want:     `{"name":"test","value":123}`,
+			name:    "unknown field",
+			content: `{"command":"sh","commnad":"bash"}`,
+			wantErr: `unknown field "commnad"`,
 		},
 		{
-			name: "empty struct",
-			skelton: struct {
-				Field1 string `json:"field1"`
-				Field2 int    `json:"field2"`
-			}{},
-			filename: "test_empty.json",
-			want:     `{"field1":"","field2":0}`,
-		},
-		{
-			name: "nested struct",
-			skelton: struct {
-				Name   string `json:"name"`
-				Config struct {
-					Enabled bool   `json:"enabled"`
-					Port    int    `json:"port"`
-					Host    string `json:"host"`
-				} `json:"config"`
-			}{
-				Name: "nested-test",
-				Config: struct {
-					Enabled bool   `json:"enabled"`
-					Port    int    `json:"port"`
-					Host    string `json:"host"`
-				}{
-					Enabled: true,
-					Port:    8080,
-					Host:    "localhost",
-				},
-			},
-			filename: "test_nested.json",
-			want:     `{"name":"nested-test","config":{"enabled":true,"port":8080,"host":"localhost"}}`,
-		},
-		{
-			name: "slice field",
-			skelton: struct {
-				Items []string `json:"items"`
-				Count int      `json:"count"`
-			}{
-				Items: []string{"item1", "item2", "item3"},
-				Count: 3,
-			},
-			filename: "test_slice.json",
-			want:     `{"items":["item1","item2","item3"],"count":3}`,
+			name:    "two JSON documents",
+			content: `{ "command":"sh" } { "command":"bash" }`,
+			wantErr: "exactly one JSON document",
 		},
 	}
 
-	// Create temporary directory for test files
-	tempDir := t.TempDir()
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Prepare file path
-			testFilePath := filepath.Join(tempDir, tt.filename)
+			path := filepath.Join(t.TempDir(), "exec-input.json")
+			writeFixture(t, path, []byte(tt.content))
 
-			// Call MakeInputFile
-			MakeInputFile(tt.skelton, testFilePath)
-
-			// Check if file exists
-			if _, err := os.Stat(testFilePath); os.IsNotExist(err) {
-				t.Fatalf("File %s was not created", testFilePath)
+			var got ExecInput
+			err := ReadInputFile(&got, path)
+			if err == nil {
+				t.Fatalf("ReadInputFile() error = nil, want an error containing %q", tt.wantErr)
 			}
-
-			// Read and verify file content
-			content, err := os.ReadFile(testFilePath)
-			if err != nil {
-				t.Fatalf("Failed to read file: %v", err)
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("ReadInputFile() error = %q, want an error containing %q", err, tt.wantErr)
 			}
-
-			if string(content) != tt.want {
-				t.Errorf("File content mismatch\ngot:  %s\nwant: %s", string(content), tt.want)
-			}
-
-			// Clean up
-			os.Remove(testFilePath)
 		})
 	}
 }
 
-func TestMakeInputFile_WithReadInputFile(t *testing.T) {
-	// Integration test with ReadInputFile
-	tempDir := t.TempDir()
-	testFilePath := filepath.Join(tempDir, "integration_test.json")
+func TestMakeInputFileRefusesExistingFileUnlessForced(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "exec-input.json")
+	original := []byte("keep me")
+	writeFixture(t, path, original)
 
-	// Define test struct
-	type TestStruct struct {
-		Name     string            `json:"name"`
-		Value    int               `json:"value"`
-		Enabled  bool              `json:"enabled"`
-		Tags     []string          `json:"tags"`
-		Metadata map[string]string `json:"metadata"`
+	err := MakeInputFile(ExecInput{Cmd: "sh"}, path, false)
+	if !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("MakeInputFile(force=false) error = %v, want fs.ErrExist", err)
 	}
 
-	// Create test data
-	original := TestStruct{
-		Name:    "integration-test",
-		Value:   42,
-		Enabled: true,
-		Tags:    []string{"test", "integration"},
-		Metadata: map[string]string{
-			"key1": "value1",
-			"key2": "value2",
-		},
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read existing input file: %v", err)
+	}
+	if string(got) != string(original) {
+		t.Fatalf("MakeInputFile(force=false) changed existing bytes: got %q, want %q", got, original)
 	}
 
-	// Write using MakeInputFile
-	MakeInputFile(original, testFilePath)
+	if err := MakeInputFile(ExecInput{Cmd: "bash"}, path, true); err != nil {
+		t.Fatalf("MakeInputFile(force=true) error = %v", err)
+	}
 
-	// Read using ReadInputFile
-	var result TestStruct
-	ReadInputFile(&result, testFilePath)
-
-	// Compare original and result
-	if result.Name != original.Name {
-		t.Errorf("Name mismatch: got %s, want %s", result.Name, original.Name)
+	var decoded ExecInput
+	if err := ReadInputFile(&decoded, path); err != nil {
+		t.Fatalf("ReadInputFile() after forced write error = %v", err)
 	}
-	if result.Value != original.Value {
-		t.Errorf("Value mismatch: got %d, want %d", result.Value, original.Value)
-	}
-	if result.Enabled != original.Enabled {
-		t.Errorf("Enabled mismatch: got %v, want %v", result.Enabled, original.Enabled)
-	}
-	if len(result.Tags) != len(original.Tags) {
-		t.Errorf("Tags length mismatch: got %d, want %d", len(result.Tags), len(original.Tags))
-	} else {
-		for i, tag := range result.Tags {
-			if tag != original.Tags[i] {
-				t.Errorf("Tag[%d] mismatch: got %s, want %s", i, tag, original.Tags[i])
-			}
-		}
-	}
-	if len(result.Metadata) != len(original.Metadata) {
-		t.Errorf("Metadata length mismatch: got %d, want %d", len(result.Metadata), len(original.Metadata))
-	} else {
-		for k, v := range result.Metadata {
-			if result.Metadata[k] != v {
-				t.Errorf("Metadata[%s] mismatch: got %s, want %s", k, result.Metadata[k], v)
-			}
-		}
+	if decoded.Cmd != "bash" {
+		t.Fatalf("forced command = %q, want %q", decoded.Cmd, "bash")
 	}
 }
 
-func TestMakeInputFile_SpecialCharacters(t *testing.T) {
-	tempDir := t.TempDir()
-	testFilePath := filepath.Join(tempDir, "special_chars.json")
-
-	// Test with special characters and unicode
-	data := struct {
-		Text     string `json:"text"`
-		Japanese string `json:"japanese"`
-		Emoji    string `json:"emoji"`
-	}{
-		Text: `Special "quotes" and \backslashes\ and newlines
-here`,
-		Japanese: "こんにちは世界",
-		Emoji:    "😀🎉",
+func TestInputFileUnicodeRoundTrip(t *testing.T) {
+	type document struct {
+		Text string `json:"text"`
 	}
 
-	MakeInputFile(data, testFilePath)
+	path := filepath.Join(t.TempDir(), "unicode-input.json")
+	want := document{Text: "こんにちは世界 😀"}
+	if err := MakeInputFile(want, path, false); err != nil {
+		t.Fatalf("MakeInputFile() error = %v", err)
+	}
 
-	// Verify the file was created and can be read back
-	var result struct {
-		Text     string `json:"text"`
-		Japanese string `json:"japanese"`
-		Emoji    string `json:"emoji"`
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat input file: %v", err)
 	}
-	ReadInputFile(&result, testFilePath)
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("input file mode = %o, want 600", got)
+	}
 
-	if result.Text != data.Text {
-		t.Errorf("Text with special characters mismatch")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read input file: %v", err)
 	}
-	if result.Japanese != data.Japanese {
-		t.Errorf("Japanese text mismatch")
+	wantContent := "{\n  \"text\": \"こんにちは世界 😀\"\n}\n"
+	if string(content) != wantContent {
+		t.Fatalf("input file content = %q, want %q", content, wantContent)
 	}
-	if result.Emoji != data.Emoji {
-		t.Errorf("Emoji mismatch")
+
+	var got document
+	if err := ReadInputFile(&got, path); err != nil {
+		t.Fatalf("ReadInputFile() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("round-trip value = %#v, want %#v", got, want)
+	}
+}
+
+func writeFixture(t *testing.T, path string, content []byte) {
+	t.Helper()
+
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
 	}
 }

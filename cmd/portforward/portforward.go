@@ -29,7 +29,9 @@ var PortforwardCmd = &cobra.Command{
 		}
 
 		if inputFile != "" {
-			input.ReadInputFile(&portforwardInput, inputFile)
+			if err := input.ReadInputFile(&portforwardInput, inputFile); err != nil {
+				log.Fatalln(err)
+			}
 		}
 
 		if portforwardInput.LocalPortNumber == "" {

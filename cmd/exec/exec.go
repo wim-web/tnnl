@@ -26,7 +26,9 @@ var ExecCmd = &cobra.Command{
 		}
 
 		if inputFile != "" {
-			input.ReadInputFile(&execInput, inputFile)
+			if err := input.ReadInputFile(&execInput, inputFile); err != nil {
+				log.Fatalln(err)
+			}
 		}
 
 		if execInput.Cmd == "" {

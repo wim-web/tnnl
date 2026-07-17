@@ -30,7 +30,9 @@ var RemoteportforwardCmd = &cobra.Command{
 		}
 
 		if inputFile != "" {
-			input.ReadInputFile(&remotePortforwardInput, inputFile)
+			if err := input.ReadInputFile(&remotePortforwardInput, inputFile); err != nil {
+				log.Fatalln(err)
+			}
 		}
 
 		if remotePortforwardInput.RemotePortNumber == "" {

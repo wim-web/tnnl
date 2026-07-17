@@ -4,44 +4,70 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 )
 
-func MakeInputFile(skelton any, filepath string) {
-	jsonData, err := json.Marshal(skelton)
+func MakeInputFile(skeleton any, path string, force bool) error {
+	jsonData, err := json.MarshalIndent(skeleton, "", "  ")
 	if err != nil {
-		log.Fatalln("Error encoding JSON:", err)
+		return fmt.Errorf("encode input file %q: %w", path, err)
+	}
+	jsonData = append(jsonData, '\n')
+
+	flags := os.O_CREATE | os.O_WRONLY
+	if force {
+		flags |= os.O_TRUNC
+	} else {
+		flags |= os.O_EXCL
 	}
 
-	file, err := os.Create(filepath)
+	file, err := os.OpenFile(path, flags, 0o600)
 	if err != nil {
-		log.Fatalln("Error creating file:", err)
-	}
-	defer file.Close()
-
-	_, err = file.Write(jsonData)
-	if err != nil {
-		log.Fatalln("Error writing to file:", err)
+		return fmt.Errorf("create input file %q: %w", path, err)
 	}
 
-	fmt.Printf("made %s\n", filepath)
+	written, err := file.Write(jsonData)
+	if err == nil && written != len(jsonData) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
+		_ = file.Close()
+		return fmt.Errorf("write input file %q: %w", path, err)
+	}
+
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("sync input file %q: %w", path, err)
+	}
+
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close input file %q: %w", path, err)
+	}
+
+	return nil
 }
 
-func ReadInputFile(v any, filepath string) {
-	file, err := os.Open(filepath)
+func ReadInputFile(v any, path string) error {
+	file, err := os.Open(path)
 	if err != nil {
-		log.Fatalln("Error opening file:", err)
+		return fmt.Errorf("open input file %q: %w", path, err)
 	}
 	defer file.Close()
 
-	jsonData, err := io.ReadAll(file)
-	if err != nil {
-		log.Fatalln("Error reading file:", err)
+	decoder := json.NewDecoder(file)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(v); err != nil {
+		return fmt.Errorf("decode input file %q: %w", path, err)
 	}
 
-	err = json.Unmarshal(jsonData, &v)
-	if err != nil {
-		log.Fatalln("Error decoding JSON:", err)
+	var extra any
+	err = decoder.Decode(&extra)
+	if err == nil {
+		return fmt.Errorf("decode input file %q: expected exactly one JSON document", path)
 	}
+	if err != io.EOF {
+		return fmt.Errorf("decode input file %q: %w", path, err)
+	}
+
+	return nil
 }
