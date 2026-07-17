@@ -36,16 +36,25 @@ func (r *Resolver) Clusters(ctx context.Context) ([]string, error) {
 		clusters  []string
 		nextToken *string
 	)
+	seenTokens := make(map[string]struct{})
 
 	for {
 		output, err := r.client.ListClusters(ctx, &ecs.ListClustersInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("list ECS clusters: %w", err)
 		}
+		if output == nil {
+			return nil, fmt.Errorf("list ECS clusters: nil response")
+		}
 		clusters = append(clusters, output.ClusterArns...)
-		if strings.TrimSpace(aws.ToString(output.NextToken)) == "" {
+		token := aws.ToString(output.NextToken)
+		if token == "" {
 			return clusters, nil
 		}
+		if _, seen := seenTokens[token]; seen {
+			return nil, fmt.Errorf("list ECS clusters: repeated pagination token %q", token)
+		}
+		seenTokens[token] = struct{}{}
 		nextToken = output.NextToken
 	}
 }
@@ -80,7 +89,8 @@ func (r *Resolver) taskARNs(ctx context.Context, cluster, serviceName string) ([
 		arns      []string
 		nextToken *string
 	)
-	seen := make(map[string]struct{})
+	seenARNs := make(map[string]struct{})
+	seenTokens := make(map[string]struct{})
 
 	for {
 		input := &ecs.ListTasksInput{
@@ -96,16 +106,24 @@ func (r *Resolver) taskARNs(ctx context.Context, cluster, serviceName string) ([
 		if err != nil {
 			return nil, fmt.Errorf("list ECS tasks in cluster %q: %w", cluster, err)
 		}
+		if output == nil {
+			return nil, fmt.Errorf("list ECS tasks in cluster %q: nil response", cluster)
+		}
 		for _, arn := range output.TaskArns {
-			if _, exists := seen[arn]; exists {
+			if _, exists := seenARNs[arn]; exists {
 				continue
 			}
-			seen[arn] = struct{}{}
+			seenARNs[arn] = struct{}{}
 			arns = append(arns, arn)
 		}
-		if strings.TrimSpace(aws.ToString(output.NextToken)) == "" {
+		token := aws.ToString(output.NextToken)
+		if token == "" {
 			return arns, nil
 		}
+		if _, seen := seenTokens[token]; seen {
+			return nil, fmt.Errorf("list ECS tasks in cluster %q: repeated pagination token %q", cluster, token)
+		}
+		seenTokens[token] = struct{}{}
 		nextToken = output.NextToken
 	}
 }
@@ -114,12 +132,16 @@ func (r *Resolver) describeTasks(ctx context.Context, cluster string, arns []str
 	var tasks []types.Task
 	for start := 0; start < len(arns); start += describeTasksLimit {
 		end := min(start+describeTasksLimit, len(arns))
+		batch := append([]string(nil), arns[start:end]...)
 		output, err := r.client.DescribeTasks(ctx, &ecs.DescribeTasksInput{
 			Cluster: aws.String(cluster),
-			Tasks:   arns[start:end],
+			Tasks:   batch,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("describe ECS tasks in cluster %q: %w", cluster, err)
+		}
+		if output == nil {
+			return nil, fmt.Errorf("describe ECS tasks in cluster %q: nil response", cluster)
 		}
 		if err := describeFailuresError(output.Failures); err != nil {
 			return nil, err

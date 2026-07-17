@@ -31,11 +31,16 @@ type describeTasksCall struct {
 }
 
 type fakeECS struct {
-	clusterPages  map[string]*ecs.ListClustersOutput
-	clusterErrors map[string]error
-	taskPages     map[string]*ecs.ListTasksOutput
-	taskErrors    map[string]error
-	describe      func(context.Context, *ecs.DescribeTasksInput) (*ecs.DescribeTasksOutput, error)
+	clusterPages          map[string]*ecs.ListClustersOutput
+	clusterErrors         map[string]error
+	nilClusterOutputs     map[string]bool
+	taskPages             map[string]*ecs.ListTasksOutput
+	taskErrors            map[string]error
+	nilTaskOutputs        map[string]bool
+	describe              func(context.Context, *ecs.DescribeTasksInput) (*ecs.DescribeTasksOutput, error)
+	callLimitError        error
+	listClustersCallLimit int
+	listTasksCallLimit    int
 
 	listClustersCalls  []listClustersCall
 	listTasksCalls     []listTasksCall
@@ -57,10 +62,16 @@ func (f *fakeECS) ListClusters(
 		input:  inputCopy,
 		marker: ctx.Value(resolverContextMarkerKey{}),
 	})
+	if f.listClustersCallLimit > 0 && len(f.listClustersCalls) > f.listClustersCallLimit {
+		return nil, f.callLimitError
+	}
 
 	token := aws.ToString(inputCopy.NextToken)
 	if err := f.clusterErrors[token]; err != nil {
 		return nil, err
+	}
+	if f.nilClusterOutputs[token] {
+		return nil, nil
 	}
 	if page := f.clusterPages[token]; page != nil {
 		return page, nil
@@ -81,10 +92,16 @@ func (f *fakeECS) ListTasks(
 		input:  inputCopy,
 		marker: ctx.Value(resolverContextMarkerKey{}),
 	})
+	if f.listTasksCallLimit > 0 && len(f.listTasksCalls) > f.listTasksCallLimit {
+		return nil, f.callLimitError
+	}
 
 	token := aws.ToString(inputCopy.NextToken)
 	if err := f.taskErrors[token]; err != nil {
 		return nil, err
+	}
+	if f.nilTaskOutputs[token] {
+		return nil, nil
 	}
 	if page := f.taskPages[token]; page != nil {
 		return page, nil
@@ -145,6 +162,52 @@ func TestResolverClustersPaginatesInOrder(t *testing.T) {
 		t.Fatalf("second ListClusters NextToken = %q, want %q", got, "clusters-page-2")
 	}
 	assertResolverCallMarkers(t, client, "cluster-marker")
+}
+
+func TestResolverClustersRejectsRepeatedPaginationTokens(t *testing.T) {
+	tests := []struct {
+		name      string
+		pages     map[string]*ecs.ListClustersOutput
+		wantCalls int
+		wantToken string
+	}{
+		{
+			name: "same token repeats",
+			pages: map[string]*ecs.ListClustersOutput{
+				"":       {NextToken: aws.String("repeat")},
+				"repeat": {NextToken: aws.String("repeat")},
+			},
+			wantCalls: 2,
+			wantToken: "repeat",
+		},
+		{
+			name: "tokens form a cycle",
+			pages: map[string]*ecs.ListClustersOutput{
+				"":       {NextToken: aws.String("page-a")},
+				"page-a": {NextToken: aws.String("page-b")},
+				"page-b": {NextToken: aws.String("page-a")},
+			},
+			wantCalls: 3,
+			wantToken: "page-a",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			callLimitError := errors.New("ListClusters fake call limit reached")
+			client := &fakeECS{
+				clusterPages:          tt.pages,
+				callLimitError:        callLimitError,
+				listClustersCallLimit: tt.wantCalls,
+			}
+
+			_, err := NewResolver(client).Clusters(context.Background())
+			assertResolverPaginationError(t, err, callLimitError, "list ECS clusters", tt.wantToken)
+			if got := len(client.listClustersCalls); got != tt.wantCalls {
+				t.Errorf("ListClusters call count = %d, want %d", got, tt.wantCalls)
+			}
+		})
+	}
 }
 
 func TestResolverEligibleTasksPaginatesAndOrderedDeduplicates(t *testing.T) {
@@ -217,6 +280,59 @@ func TestResolverEligibleTasksPaginatesAndOrderedDeduplicates(t *testing.T) {
 	}
 }
 
+func TestResolverEligibleTasksRejectsRepeatedPaginationTokens(t *testing.T) {
+	tests := []struct {
+		name      string
+		pages     map[string]*ecs.ListTasksOutput
+		wantCalls int
+		wantToken string
+	}{
+		{
+			name: "same token repeats",
+			pages: map[string]*ecs.ListTasksOutput{
+				"":       {NextToken: aws.String("repeat")},
+				"repeat": {NextToken: aws.String("repeat")},
+			},
+			wantCalls: 2,
+			wantToken: "repeat",
+		},
+		{
+			name: "tokens form a cycle",
+			pages: map[string]*ecs.ListTasksOutput{
+				"":       {NextToken: aws.String("page-a")},
+				"page-a": {NextToken: aws.String("page-b")},
+				"page-b": {NextToken: aws.String("page-a")},
+			},
+			wantCalls: 3,
+			wantToken: "page-a",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			callLimitError := errors.New("ListTasks fake call limit reached")
+			client := &fakeECS{
+				taskPages:          tt.pages,
+				callLimitError:     callLimitError,
+				listTasksCallLimit: tt.wantCalls,
+			}
+
+			_, err := NewResolver(client).EligibleTasks(context.Background(), "cyclic-cluster", "")
+			assertResolverPaginationError(
+				t,
+				err,
+				callLimitError,
+				"list ECS tasks",
+				"cyclic-cluster",
+				tt.wantToken,
+			)
+			if got := len(client.listTasksCalls); got != tt.wantCalls {
+				t.Errorf("ListTasks call count = %d, want %d", got, tt.wantCalls)
+			}
+		})
+	}
+}
+
 func TestResolverEligibleTasksChunksDescribeRequestsAndPreservesResponseOrder(t *testing.T) {
 	arns := make([]string, 201)
 	for i := range arns {
@@ -267,6 +383,36 @@ func TestResolverEligibleTasksChunksDescribeRequestsAndPreservesResponseOrder(t 
 		t.Fatalf("EligibleTasks() response order = %#v, want %#v", gotOrder, wantOrder)
 	}
 	assertResolverCallMarkers(t, client, "batch-marker")
+}
+
+func TestResolverDescribeTaskBatchesUseIndependentSlices(t *testing.T) {
+	arns := make([]string, 201)
+	for i := range arns {
+		arns[i] = fmt.Sprintf("task-%03d", i)
+	}
+
+	client := &fakeECS{
+		taskPages: map[string]*ecs.ListTasksOutput{
+			"": {TaskArns: arns},
+		},
+		describe: func(_ context.Context, input *ecs.DescribeTasksInput) (*ecs.DescribeTasksOutput, error) {
+			if len(input.Tasks) > 0 && input.Tasks[0] == "task-000" {
+				input.Tasks = append(input.Tasks, "client-appended-task")
+			}
+			return &ecs.DescribeTasksOutput{}, nil
+		},
+	}
+
+	_, err := NewResolver(client).EligibleTasks(context.Background(), "batch-cluster", "")
+	if err != nil {
+		t.Fatalf("EligibleTasks() error = %v", err)
+	}
+	if got := len(client.describeTasksCalls); got != 3 {
+		t.Fatalf("DescribeTasks call count = %d, want 3", got)
+	}
+	if got := client.describeTasksCalls[1].input.Tasks[0]; got != "task-100" {
+		t.Fatalf("second DescribeTasks batch starts with %q, want %q", got, "task-100")
+	}
 }
 
 func TestResolverEligibleTasksReturnsJoinedDescribeFailures(t *testing.T) {
@@ -392,6 +538,70 @@ func TestResolverAPIErrorsPreserveCauseAndContext(t *testing.T) {
 	})
 }
 
+func TestResolverRejectsNilAPIOutputs(t *testing.T) {
+	tests := []struct {
+		name          string
+		client        *fakeECS
+		call          func(*Resolver) error
+		wantFragments []string
+	}{
+		{
+			name: "list clusters",
+			client: &fakeECS{
+				nilClusterOutputs: map[string]bool{"": true},
+			},
+			call: func(resolver *Resolver) error {
+				_, err := resolver.Clusters(context.Background())
+				return err
+			},
+			wantFragments: []string{"list ECS clusters", "nil response"},
+		},
+		{
+			name: "list tasks",
+			client: &fakeECS{
+				nilTaskOutputs: map[string]bool{"": true},
+			},
+			call: func(resolver *Resolver) error {
+				_, err := resolver.EligibleTasks(context.Background(), "nil-output-cluster", "")
+				return err
+			},
+			wantFragments: []string{"list ECS tasks", "nil-output-cluster", "nil response"},
+		},
+		{
+			name: "describe tasks",
+			client: &fakeECS{
+				taskPages: map[string]*ecs.ListTasksOutput{
+					"": {TaskArns: []string{"task-a"}},
+				},
+				describe: func(context.Context, *ecs.DescribeTasksInput) (*ecs.DescribeTasksOutput, error) {
+					return nil, nil
+				},
+			},
+			call: func(resolver *Resolver) error {
+				_, err := resolver.EligibleTasks(context.Background(), "nil-output-cluster", "")
+				return err
+			},
+			wantFragments: []string{"describe ECS tasks", "nil-output-cluster", "nil response"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := captureResolverPanic(func() error {
+				return tt.call(NewResolver(tt.client))
+			})
+			if err == nil {
+				t.Fatal("error = nil, want nil API response error")
+			}
+			for _, fragment := range tt.wantFragments {
+				if !strings.Contains(err.Error(), fragment) {
+					t.Errorf("error = %q, want fragment %q", err, fragment)
+				}
+			}
+		})
+	}
+}
+
 func describeEveryInputTaskAsEligible(_ context.Context, input *ecs.DescribeTasksInput) (*ecs.DescribeTasksOutput, error) {
 	tasks := make([]types.Task, 0, len(input.Tasks))
 	for _, arn := range input.Tasks {
@@ -457,4 +667,28 @@ func assertResolverAPIError(t *testing.T, got, wantCause error, wantFragments ..
 			t.Errorf("error = %q, want fragment %q", got, fragment)
 		}
 	}
+}
+
+func assertResolverPaginationError(t *testing.T, got, callLimitError error, wantFragments ...string) {
+	t.Helper()
+	if got == nil {
+		t.Fatal("error = nil, want repeated pagination token error")
+	}
+	if errors.Is(got, callLimitError) {
+		t.Errorf("error = %v, resolver reached fake call limit before detecting repeated token", got)
+	}
+	for _, fragment := range wantFragments {
+		if !strings.Contains(got.Error(), fragment) {
+			t.Errorf("error = %q, want fragment %q", got, fragment)
+		}
+	}
+}
+
+func captureResolverPanic(call func() error) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("panic: %v", recovered)
+		}
+	}()
+	return call()
 }
