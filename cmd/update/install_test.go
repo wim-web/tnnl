@@ -189,6 +189,133 @@ func TestVerifyCandidateVersion(t *testing.T) {
 	})
 }
 
+func TestReplaceExecutablePreservesLegacySentinel(t *testing.T) {
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "tnnl")
+	candidatePath := filepath.Join(dir, "candidate")
+	sentinelPath := filepath.Join(dir, ".tnnl.new")
+	if err := os.WriteFile(currentPath, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(candidatePath, []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sentinelPath, []byte("sentinel"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	sentinelBefore, err := os.Stat(sentinelPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := replaceExecutable(currentPath, candidatePath); err != nil {
+		t.Fatalf("replaceExecutable() error = %v", err)
+	}
+
+	sentinelAfter, err := os.Stat(sentinelPath)
+	if err != nil {
+		t.Fatalf("os.Stat(%q) error = %v; legacy sentinel must remain", sentinelPath, err)
+	}
+	if !os.SameFile(sentinelBefore, sentinelAfter) {
+		t.Fatal("legacy sentinel was replaced")
+	}
+	if got, want := sentinelAfter.Mode().Perm(), os.FileMode(0o640); got != want {
+		t.Fatalf("legacy sentinel mode = %o, want %o", got, want)
+	}
+	content, err := os.ReadFile(sentinelPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(content), "sentinel"; got != want {
+		t.Fatalf("legacy sentinel content = %q, want %q", got, want)
+	}
+}
+
+func TestReplaceExecutableSuccess(t *testing.T) {
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "tnnl")
+	candidatePath := filepath.Join(dir, "candidate")
+	if err := os.WriteFile(currentPath, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(candidatePath, []byte("new"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := replaceExecutable(currentPath, candidatePath); err != nil {
+		t.Fatalf("replaceExecutable() error = %v", err)
+	}
+
+	content, err := os.ReadFile(currentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(content), "new"; got != want {
+		t.Fatalf("replacement content = %q, want %q", got, want)
+	}
+	info, err := os.Stat(currentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := info.Mode().Perm(), os.FileMode(0o755); got != want {
+		t.Fatalf("replacement mode = %o, want %o", got, want)
+	}
+	matches, err := filepath.Glob(filepath.Join(dir, ".tnnl.new-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("replacement temp remnants = %q, want none", matches)
+	}
+}
+
+func TestReplaceExecutableFailureCleansUpOnlyOwnTemp(t *testing.T) {
+	t.Run("candidate open", func(t *testing.T) {
+		fixture := newReplacementFailureFixture(t)
+		fixture.candidatePath = filepath.Join(fixture.dir, "missing-candidate")
+
+		assertReplacementFailure(t, fixture, "open candidate executable")
+	})
+
+	t.Run("candidate copy", func(t *testing.T) {
+		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+			t.Skip("directory read failure fixture requires Darwin or Linux")
+		}
+		fixture := newReplacementFailureFixture(t)
+		if err := os.Remove(fixture.candidatePath); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(fixture.candidatePath, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		assertReplacementFailure(t, fixture, "copy candidate executable")
+	})
+
+	t.Run("create temp", func(t *testing.T) {
+		fixture := newReplacementFailureFixture(t)
+		notDirectoryPath := filepath.Join(fixture.dir, "not-a-directory")
+		if err := os.WriteFile(notDirectoryPath, []byte("file"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		fixture.currentPath = filepath.Join(notDirectoryPath, "tnnl")
+
+		assertReplacementFailure(t, fixture, "create replacement temp")
+	})
+
+	t.Run("rename", func(t *testing.T) {
+		fixture := newReplacementFailureFixture(t)
+		if err := os.Remove(fixture.currentPath); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(fixture.currentPath, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		assertReplacementFailure(t, fixture, "replace executable")
+	})
+}
+
 func writeCandidateFixture(t *testing.T, command string) string {
 	t.Helper()
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
@@ -204,6 +331,94 @@ func writeCandidateFixture(t *testing.T, command string) string {
 	}
 
 	return candidatePath
+}
+
+type replacementFileSnapshot struct {
+	info    os.FileInfo
+	content []byte
+}
+
+type replacementFailureFixture struct {
+	dir            string
+	currentPath    string
+	candidatePath  string
+	otherTempPath  string
+	preservedFiles map[string]replacementFileSnapshot
+}
+
+func newReplacementFailureFixture(t *testing.T) *replacementFailureFixture {
+	t.Helper()
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "tnnl")
+	candidatePath := filepath.Join(dir, "candidate")
+	sentinelPath := filepath.Join(dir, ".tnnl.new")
+	otherTempPath := filepath.Join(dir, ".tnnl.new-unrelated")
+	for path, content := range map[string]string{
+		currentPath:   "old",
+		candidatePath: "new",
+		sentinelPath:  "sentinel",
+		otherTempPath: "unrelated",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o640); err != nil {
+			t.Fatalf("os.WriteFile(%q) error = %v", path, err)
+		}
+	}
+
+	return &replacementFailureFixture{
+		dir:           dir,
+		currentPath:   currentPath,
+		candidatePath: candidatePath,
+		otherTempPath: otherTempPath,
+		preservedFiles: map[string]replacementFileSnapshot{
+			sentinelPath:  snapshotReplacementFile(t, sentinelPath),
+			otherTempPath: snapshotReplacementFile(t, otherTempPath),
+		},
+	}
+}
+
+func snapshotReplacementFile(t *testing.T, path string) replacementFileSnapshot {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("os.Stat(%q) error = %v", path, err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile(%q) error = %v", path, err)
+	}
+	return replacementFileSnapshot{info: info, content: content}
+}
+
+func assertReplacementFailure(t *testing.T, fixture *replacementFailureFixture, wantOperation string) {
+	t.Helper()
+	err := replaceExecutable(fixture.currentPath, fixture.candidatePath)
+	if err == nil {
+		t.Fatalf("replaceExecutable() error = nil, want %q failure", wantOperation)
+	}
+	if !strings.Contains(err.Error(), wantOperation) {
+		t.Fatalf("replaceExecutable() error = %q, want operation %q", err, wantOperation)
+	}
+
+	for path, before := range fixture.preservedFiles {
+		after := snapshotReplacementFile(t, path)
+		if !os.SameFile(before.info, after.info) {
+			t.Fatalf("preserved file %q was replaced", path)
+		}
+		if after.info.Mode() != before.info.Mode() {
+			t.Fatalf("preserved file %q mode = %v, want %v", path, after.info.Mode(), before.info.Mode())
+		}
+		if got, want := string(after.content), string(before.content); got != want {
+			t.Fatalf("preserved file %q content = %q, want %q", path, got, want)
+		}
+	}
+
+	matches, globErr := filepath.Glob(filepath.Join(fixture.dir, ".tnnl.new-*"))
+	if globErr != nil {
+		t.Fatal(globErr)
+	}
+	if len(matches) != 1 || matches[0] != fixture.otherTempPath {
+		t.Fatalf("replacement temps = %q, want only %q", matches, fixture.otherTempPath)
+	}
 }
 
 func runCandidateParentHelper() int {

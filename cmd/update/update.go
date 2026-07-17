@@ -259,39 +259,6 @@ func extractBinaryFromArchive(archivePath string, destPath string) error {
 	return fmt.Errorf("binary not found in archive: %s", binaryName)
 }
 
-func replaceExecutable(currentPath string, newBinaryPath string) error {
-	tmpPath := filepath.Join(filepath.Dir(currentPath), fmt.Sprintf(".%s.new", filepath.Base(currentPath)))
-
-	src, err := os.Open(newBinaryPath)
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-
-	dst, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
-	if err != nil {
-		return err
-	}
-
-	_, copyErr := io.Copy(dst, src)
-	closeErr := dst.Close()
-	if copyErr != nil {
-		_ = os.Remove(tmpPath)
-		return copyErr
-	}
-	if closeErr != nil {
-		_ = os.Remove(tmpPath)
-		return closeErr
-	}
-
-	if err := os.Rename(tmpPath, currentPath); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to replace executable (%s). check write permission: %w", currentPath, err)
-	}
-
-	return nil
-}
-
 func normalizeVersion(v string) string {
 	return strings.TrimPrefix(strings.TrimSpace(v), "v")
 }
