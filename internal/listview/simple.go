@@ -16,14 +16,6 @@ var (
 	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
 )
 
-func RenderList(title string, l []string) (string, bool, error) {
-	options := make([]Option, len(l))
-	for i, s := range l {
-		options[i] = Option{Label: s, Value: s}
-	}
-	return RenderOptions(title, options)
-}
-
 type Option struct {
 	Label string
 	Value string

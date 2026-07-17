@@ -13,10 +13,6 @@ import (
 
 const CommandName = "session-manager-plugin"
 
-// SESSION_MANAGER_COMMAND is kept temporarily for callers using the legacy
-// three-argument command builder.
-const SESSION_MANAGER_COMMAND = CommandName
-
 type SessionResponse struct {
 	SessionID  string `json:"SessionId"`
 	StreamURL  string `json:"StreamUrl"`
@@ -160,17 +156,4 @@ func (r *Runner) Run(ctx context.Context, invocation Invocation) error {
 		return runErr
 	}
 	return nil
-}
-
-func MakeStartSessionCmd(ctx context.Context, response string, region string) *exec.Cmd {
-	const OperationName = "StartSession"
-
-	// https://github.com/aws/session-manager-plugin/blob/1.2.463.0/src/sessionmanagerplugin/session/session.go#L163-L178
-	return exec.CommandContext(
-		ctx,
-		SESSION_MANAGER_COMMAND,
-		response,
-		region,
-		OperationName,
-	)
 }
