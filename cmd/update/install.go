@@ -8,11 +8,15 @@ import (
 	"time"
 )
 
+const candidateVersionWaitDelay = 200 * time.Millisecond
+
 func verifyCandidateVersion(ctx context.Context, candidatePath, releaseTag string) error {
 	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	output, err := exec.CommandContext(checkCtx, candidatePath, "version").Output()
+	candidate := exec.CommandContext(checkCtx, candidatePath, "version")
+	candidate.WaitDelay = candidateVersionWaitDelay
+	output, err := candidate.Output()
 	if err != nil {
 		runErr := fmt.Errorf("run candidate version: %w", err)
 		if contextErr := checkCtx.Err(); contextErr != nil {
