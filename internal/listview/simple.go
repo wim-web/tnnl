@@ -17,14 +17,39 @@ var (
 )
 
 func RenderList(title string, l []string) (string, bool, error) {
-	var items []list.Item
-	for _, s := range l {
-		items = append(items, item(s))
+	options := make([]Option, len(l))
+	for i, s := range l {
+		options[i] = Option{Label: s, Value: s}
+	}
+	return RenderOptions(title, options)
+}
+
+type Option struct {
+	Label string
+	Value string
+}
+
+type NoItemsError struct {
+	Title string
+}
+
+func (e *NoItemsError) Error() string {
+	return fmt.Sprintf("%s: no selectable items", e.Title)
+}
+
+func RenderOptions(title string, options []Option) (string, bool, error) {
+	if len(options) == 0 {
+		return "", false, &NoItemsError{Title: title}
 	}
 
-	list := list.New(items, itemDelegate{}, listWidth, listHeight)
-	list.Title = title
-	m := model{list: list}
+	items := make([]list.Item, 0, len(options))
+	for _, option := range options {
+		items = append(items, item{Option: option})
+	}
+
+	listModel := list.New(items, itemDelegate{}, listWidth, listHeight)
+	listModel.Title = title
+	m := model{list: listModel}
 
 	p := tea.NewProgram(m)
 
@@ -34,14 +59,19 @@ func RenderList(title string, l []string) (string, bool, error) {
 		return "", false, err
 	}
 
-	m, _ = mi.(model)
+	m, ok := mi.(model)
+	if !ok {
+		return "", false, fmt.Errorf("unexpected model type %T", mi)
+	}
 
 	return m.choice, m.quitting, nil
 }
 
-type item string
+type item struct {
+	Option
+}
 
-func (i item) FilterValue() string { return string(i) }
+func (i item) FilterValue() string { return i.Label }
 
 type itemDelegate struct{}
 
@@ -54,7 +84,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		return
 	}
 
-	str := fmt.Sprintf("%d. %s", index+1, i)
+	str := fmt.Sprintf("%d. %s", index+1, i.Label)
 
 	fn := itemStyle.Render
 	if index == m.Index() {
@@ -93,9 +123,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			i, ok := m.list.SelectedItem().(item)
-			if ok {
-				m.choice = string(i)
+			if !ok {
+				return m, nil
 			}
+			m.choice = i.Value
 			return m, tea.Quit
 		}
 	}
