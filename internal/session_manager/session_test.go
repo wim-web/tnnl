@@ -223,12 +223,13 @@ func TestPreflightRejectsEmptyVersionOutput(t *testing.T) {
 }
 
 func TestPreflightDeadlineIsDiscoverable(t *testing.T) {
+	processErr := errors.New("process killed")
 	deps := dependencies{
 		lookPath: func(string) (string, error) { return "/plugin", nil },
 		commandContext: func(ctx context.Context, _ string, _ ...string) command {
 			return commandFunc(func() ([]byte, error) {
 				<-ctx.Done()
-				return nil, errors.New("process killed")
+				return nil, processErr
 			})
 		},
 		preflightLimit: 20 * time.Millisecond,
@@ -238,17 +239,21 @@ func TestPreflightDeadlineIsDiscoverable(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("preflight() error = %v, want errors.Is(DeadlineExceeded)", err)
 	}
+	if !errors.Is(err, processErr) {
+		t.Fatalf("preflight() error = %v, want errors.Is(processErr)", err)
+	}
 }
 
 func TestPreflightParentCancellationIsDiscoverable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
+	processErr := errors.New("process killed")
 	deps := dependencies{
 		lookPath: func(string) (string, error) { return "/plugin", nil },
 		commandContext: func(ctx context.Context, _ string, _ ...string) command {
 			return commandFunc(func() ([]byte, error) {
 				<-ctx.Done()
-				return nil, errors.New("process killed")
+				return nil, processErr
 			})
 		},
 		preflightLimit: time.Second,
@@ -257,6 +262,9 @@ func TestPreflightParentCancellationIsDiscoverable(t *testing.T) {
 	_, err := preflight(ctx, deps)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("preflight() error = %v, want errors.Is(Canceled)", err)
+	}
+	if !errors.Is(err, processErr) {
+		t.Fatalf("preflight() error = %v, want errors.Is(processErr)", err)
 	}
 }
 
@@ -424,11 +432,41 @@ func TestRunnerRunPreservesCancellation(t *testing.T) {
 	}
 	t.Setenv(helperModeEnv, helperModeBlock)
 	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(20*time.Millisecond, cancel)
+	defer cancel()
+	timer := time.AfterFunc(20*time.Millisecond, cancel)
+	defer timer.Stop()
 
 	err = (&Runner{path: executable}).Run(ctx, validInvocation())
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Run() error = %v, want errors.Is(Canceled)", err)
+	}
+	assertWrappedProcessError(t, err)
+}
+
+func TestRunnerRunPreservesDeadline(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(helperModeEnv, helperModeBlock)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	err = (&Runner{path: executable}).Run(ctx, validInvocation())
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Run() error = %v, want errors.Is(DeadlineExceeded)", err)
+	}
+	assertWrappedProcessError(t, err)
+}
+
+func assertWrappedProcessError(t *testing.T, err error) {
+	t.Helper()
+	if err == nil || !strings.Contains(err.Error(), "run "+CommandName) {
+		t.Fatalf("error = %v, want %q wrapper", err, "run "+CommandName)
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("error = %v, want wrapped *exec.ExitError", err)
 	}
 }
 
