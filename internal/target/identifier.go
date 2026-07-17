@@ -16,12 +16,9 @@ func ClusterName(input string) (string, error) {
 	}
 
 	if strings.HasPrefix(input, "arn:") {
-		parsed, err := arn.Parse(input)
+		parsed, err := parseECSARN(input)
 		if err != nil {
 			return "", fmt.Errorf("invalid cluster ARN %q: %w", original, err)
-		}
-		if parsed.Service != "ecs" {
-			return "", fmt.Errorf("cluster ARN %q is not an ECS ARN", original)
 		}
 
 		parts := strings.Split(parsed.Resource, "/")
@@ -51,12 +48,9 @@ func TaskID(input string) (string, error) {
 
 	resource := input
 	if strings.HasPrefix(input, "arn:") {
-		parsed, err := arn.Parse(input)
+		parsed, err := parseECSARN(input)
 		if err != nil {
 			return "", fmt.Errorf("invalid task ARN %q: %w", original, err)
-		}
-		if parsed.Service != "ecs" {
-			return "", fmt.Errorf("task ARN %q is not an ECS ARN", original)
 		}
 		resource = parsed.Resource
 	}
@@ -79,14 +73,49 @@ func TaskID(input string) (string, error) {
 	return id, nil
 }
 
+func parseECSARN(input string) (arn.ARN, error) {
+	parsed, err := arn.Parse(input)
+	if err != nil {
+		return arn.ARN{}, err
+	}
+	if parsed.Service != "ecs" {
+		return arn.ARN{}, fmt.Errorf("service must be ecs")
+	}
+	if parsed.Partition == "" {
+		return arn.ARN{}, fmt.Errorf("partition must not be empty")
+	}
+	if parsed.Region == "" {
+		return arn.ARN{}, fmt.Errorf("region must not be empty")
+	}
+	if !isAccountID(parsed.AccountID) {
+		return arn.ARN{}, fmt.Errorf("account ID must be exactly 12 ASCII digits")
+	}
+	return parsed, nil
+}
+
+func isAccountID(input string) bool {
+	if len(input) != 12 {
+		return false
+	}
+	for i := range len(input) {
+		if input[i] < '0' || input[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func finalSegment(parts []string) (string, error) {
 	if len(parts) == 0 {
 		return "", fmt.Errorf("resource path has no components")
 	}
-
-	segment := strings.TrimSpace(parts[len(parts)-1])
-	if segment == "" {
-		return "", fmt.Errorf("resource path has an empty final segment")
+	for _, segment := range parts {
+		if segment == "" {
+			return "", fmt.Errorf("resource path has an empty component")
+		}
+		if segment != strings.TrimSpace(segment) {
+			return "", fmt.Errorf("resource path components must not have surrounding whitespace")
+		}
 	}
-	return segment, nil
+	return parts[len(parts)-1], nil
 }

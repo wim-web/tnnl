@@ -31,6 +31,12 @@ func TestEligibleTaskRequiresReadyTaskAndContainer(t *testing.T) {
 			},
 		},
 		{
+			name: "task status padded with whitespace",
+			mutate: func(task *types.Task) {
+				task.LastStatus = aws.String(" RUNNING ")
+			},
+		},
+		{
 			name: "missing task ARN",
 			mutate: func(task *types.Task) {
 				task.TaskArn = aws.String("   ")
@@ -49,6 +55,12 @@ func TestEligibleTaskRequiresReadyTaskAndContainer(t *testing.T) {
 			},
 		},
 		{
+			name: "container status padded with whitespace",
+			mutate: func(task *types.Task) {
+				task.Containers[0].LastStatus = aws.String(" RUNNING ")
+			},
+		},
+		{
 			name: "missing runtime ID",
 			mutate: func(task *types.Task) {
 				task.Containers[0].RuntimeId = aws.String("   ")
@@ -64,6 +76,12 @@ func TestEligibleTaskRequiresReadyTaskAndContainer(t *testing.T) {
 			name: "execute command agent pending",
 			mutate: func(task *types.Task) {
 				task.Containers[0].ManagedAgents[0].LastStatus = aws.String("PENDING")
+			},
+		},
+		{
+			name: "execute command agent status padded with whitespace",
+			mutate: func(task *types.Task) {
+				task.Containers[0].ManagedAgents[0].LastStatus = aws.String(" RUNNING ")
 			},
 		},
 		{

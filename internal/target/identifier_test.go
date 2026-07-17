@@ -32,6 +32,11 @@ func TestClusterName(t *testing.T) {
 				input: "  arn:aws:ecs:us-east-1:123456789012:cluster/cluster-name  ",
 				want:  "cluster-name",
 			},
+			{
+				name:  "GovCloud ARN",
+				input: "arn:aws-us-gov:ecs:us-gov-west-1:123456789012:cluster/cluster-name",
+				want:  "cluster-name",
+			},
 		}
 
 		for _, tt := range tests {
@@ -57,10 +62,16 @@ func TestClusterName(t *testing.T) {
 			{name: "slash in short name", input: "cluster/name"},
 			{name: "malformed ARN", input: "arn:aws:ecs"},
 			{name: "non-ECS ARN", input: "arn:aws:ssm:us-east-1:123456789012:cluster/cluster-name"},
+			{name: "empty ARN partition", input: "arn::ecs:us-east-1:123456789012:cluster/cluster-name"},
+			{name: "empty ARN region", input: "arn:aws:ecs::123456789012:cluster/cluster-name"},
+			{name: "empty ARN account", input: "arn:aws:ecs:us-east-1::cluster/cluster-name"},
+			{name: "short ARN account", input: "arn:aws:ecs:us-east-1:12345678901:cluster/cluster-name"},
+			{name: "non-numeric ARN account", input: "arn:aws:ecs:us-east-1:12345678901x:cluster/cluster-name"},
 			{name: "wrong ARN resource type", input: "arn:aws:ecs:us-east-1:123456789012:task/cluster-name"},
 			{name: "missing ARN path component", input: "arn:aws:ecs:us-east-1:123456789012:cluster"},
 			{name: "extra ARN path component", input: "arn:aws:ecs:us-east-1:123456789012:cluster/cluster-name/extra"},
 			{name: "empty ARN final segment", input: "arn:aws:ecs:us-east-1:123456789012:cluster/"},
+			{name: "whitespace around ARN resource segment", input: "arn:aws:ecs:us-east-1:123456789012:cluster/ foo "},
 		}
 
 		for _, tt := range tests {
@@ -104,6 +115,11 @@ func TestTaskID(t *testing.T) {
 				input: "  arn:aws:ecs:us-east-1:123456789012:task/cluster/abc  ",
 				want:  "abc",
 			},
+			{
+				name:  "China ARN",
+				input: "arn:aws-cn:ecs:cn-north-1:123456789012:task/cluster/abc",
+				want:  "abc",
+			},
 		}
 
 		for _, tt := range tests {
@@ -133,8 +149,15 @@ func TestTaskID(t *testing.T) {
 			{name: "empty long final segment", input: "task/cluster/"},
 			{name: "missing long middle segment", input: "task//abc"},
 			{name: "extra resource path component", input: "task/cluster/abc/extra"},
+			{name: "whitespace around cluster segment", input: "task/ cluster /abc"},
+			{name: "whitespace around task ID segment", input: "task/cluster/ abc "},
 			{name: "malformed ARN", input: "arn:aws:ecs"},
 			{name: "non-ECS ARN", input: "arn:aws:ssm:us-east-1:123456789012:task/abc"},
+			{name: "empty ARN partition", input: "arn::ecs:us-east-1:123456789012:task/cluster/abc"},
+			{name: "empty ARN region", input: "arn:aws:ecs::123456789012:task/cluster/abc"},
+			{name: "empty ARN account", input: "arn:aws:ecs:us-east-1::task/cluster/abc"},
+			{name: "short ARN account", input: "arn:aws:ecs:us-east-1:12345678901:task/cluster/abc"},
+			{name: "non-numeric ARN account", input: "arn:aws:ecs:us-east-1:12345678901x:task/cluster/abc"},
 			{name: "wrong ARN resource type", input: "arn:aws:ecs:us-east-1:123456789012:service/cluster/abc"},
 			{name: "missing ARN path component", input: "arn:aws:ecs:us-east-1:123456789012:task"},
 			{name: "extra ARN path component", input: "arn:aws:ecs:us-east-1:123456789012:task/cluster/abc/extra"},

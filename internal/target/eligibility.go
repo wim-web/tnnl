@@ -12,7 +12,7 @@ const runningStatus = "RUNNING"
 // EligibleContainers returns the containers ready for ECS Exec or port forwarding.
 func EligibleContainers(task types.Task) []types.Container {
 	if !task.EnableExecuteCommand ||
-		strings.TrimSpace(aws.ToString(task.LastStatus)) != runningStatus ||
+		aws.ToString(task.LastStatus) != runningStatus ||
 		strings.TrimSpace(aws.ToString(task.TaskArn)) == "" {
 		return nil
 	}
@@ -20,7 +20,7 @@ func EligibleContainers(task types.Task) []types.Container {
 	var eligible []types.Container
 	for _, container := range task.Containers {
 		if strings.TrimSpace(aws.ToString(container.Name)) == "" ||
-			strings.TrimSpace(aws.ToString(container.LastStatus)) != runningStatus ||
+			aws.ToString(container.LastStatus) != runningStatus ||
 			strings.TrimSpace(aws.ToString(container.RuntimeId)) == "" ||
 			!hasRunningExecuteCommandAgent(container.ManagedAgents) {
 			continue
@@ -38,7 +38,7 @@ func IsEligibleTask(task types.Task) bool {
 func hasRunningExecuteCommandAgent(agents []types.ManagedAgent) bool {
 	for _, agent := range agents {
 		if agent.Name == types.ManagedAgentNameExecuteCommandAgent &&
-			strings.TrimSpace(aws.ToString(agent.LastStatus)) == runningStatus {
+			aws.ToString(agent.LastStatus) == runningStatus {
 			return true
 		}
 	}
