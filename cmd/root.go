@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/wim-web/tnnl/internal/buildinfo"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -32,7 +33,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&shortVersion, "version", "v", false, "Print the version")
 }
 
-var Version string
+var Version = buildinfo.Current()
 var shortVersion bool
 
 var versionCmd = &cobra.Command{

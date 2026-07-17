@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/wim-web/tnnl/cmd"
@@ -16,12 +14,7 @@ import (
 	_ "github.com/wim-web/tnnl/cmd/update"
 )
 
-//go:embed .version
-var version string
-
 func main() {
-	cmd.Version = strings.TrimSpace(version)
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

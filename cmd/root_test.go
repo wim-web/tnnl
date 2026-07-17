@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/wim-web/tnnl/internal/buildinfo"
 )
 
 func TestExecuteContextPropagatesCancellation(t *testing.T) {
@@ -135,7 +136,13 @@ func TestRootCommandMetadataAndFlags(t *testing.T) {
 	}
 }
 
-func TestVersionCommandsWriteToConfiguredOutput(t *testing.T) {
+func TestVersionDefaultsToBuildInfo(t *testing.T) {
+	if got, want := Version, buildinfo.Current(); got != want {
+		t.Fatalf("Version = %q, want buildinfo.Current() %q", got, want)
+	}
+}
+
+func TestVersionCommandsWriteIdenticalOutput(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
@@ -143,12 +150,13 @@ func TestVersionCommandsWriteToConfiguredOutput(t *testing.T) {
 		{name: "subcommand", args: []string{"version"}},
 		{name: "flag", args: []string{"--version"}},
 	}
+	outputs := make(map[string]string, len(tests))
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			prepareRootCommandTest(t, tt.args, &stdout, &stderr)
-			Version = "v1.2.3"
+			Version = "1.2.3"
 
 			if err := ExecuteContext(context.Background()); err != nil {
 				t.Fatalf("ExecuteContext() error = %v", err)
@@ -159,7 +167,12 @@ func TestVersionCommandsWriteToConfiguredOutput(t *testing.T) {
 			if got := stderr.String(); got != "" {
 				t.Errorf("version error output = %q, want empty output", got)
 			}
+			outputs[tt.name] = stdout.String()
 		})
+	}
+
+	if got, want := outputs["flag"], outputs["subcommand"]; got != want {
+		t.Errorf("--version output = %q, want version output %q", got, want)
 	}
 }
 
@@ -176,7 +189,7 @@ func TestVersionCommandsReturnWriteErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			wantErr := errors.New("write failure")
 			prepareRootCommandTest(t, tt.args, failingWriter{err: wantErr}, io.Discard)
-			Version = "v1.2.3"
+			Version = "1.2.3"
 
 			err := ExecuteContext(context.Background())
 			if !errors.Is(err, wantErr) {

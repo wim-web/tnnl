@@ -1,21 +1,23 @@
 #!/bin/bash
 
-SCRIPT_DIR=$(cd $(dirname $0); pwd)
+set -euo pipefail
 
-version="$(cat "$SCRIPT_DIR/.version")"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+version="${1:-}"
 
-# y/nでversionを確認して、yesならtagをうってpushする
+if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf 'usage: ./tag.bash vX.Y.Z\n' >&2
+    exit 2
+fi
 
-# バージョン確認メッセージ
-echo "Current version is: $version"
-read -p "Do you want to tag and push this version? (y/n): " confirm
+printf 'Current version is: %s\n' "$version"
+confirm=""
+read -r -p "Do you want to tag and push this version? (y/n): " confirm || true
 
-# 入力が 'y' または 'Y' の場合のみタグ付けしてプッシュ
 if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-    # Gitタグを作成し、リモートにプッシュ
-    git tag "$version"
-    git push origin "$version"
-    echo "Tag v$version has been pushed to remote repository."
+    git -C "$script_dir" tag "$version"
+    git -C "$script_dir" push origin "$version"
+    printf 'Tag %s has been pushed to remote repository.\n' "$version"
 else
-    echo "Tagging and push canceled."
+    printf 'Tagging and push canceled.\n'
 fi
