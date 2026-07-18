@@ -1,24 +1,52 @@
-name: release
+name: Release
+
 on:
   push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
-      
-permissions:
-    contents: write
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  quality:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+
   release:
-    name: Release Go Binary
+    needs: quality
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e # v4.0.5
+        with:
+          fetch-depth: 0
+
+      - name: Install pinned tools
+        uses: aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e # v4.0.5
         with:
           aqua_version: v2.60.1
-      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
-        with:
-          version: latest
-          args: release --clean
+          enable_aqua_install: true
+          aqua_opts: ""
+
+      - name: Build without publishing
+        run: goreleaser release --clean --skip=publish
+
+      - name: Verify checksums and version
+        run: >-
+          bash script/verify-release-artifacts.sh
+          "$GITHUB_REF_NAME" dist tnnl_linux_amd64.tar.gz
+
+      - name: Publish the verified files
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          dist/tnnl_*.tar.gz dist/checksums.txt
+          --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
