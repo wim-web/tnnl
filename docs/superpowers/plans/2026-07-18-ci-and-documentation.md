@@ -434,7 +434,7 @@ snapshot_arch="$(go env GOARCH)"
 snapshot_asset="tnnl_${snapshot_os}_${snapshot_arch}.tar.gz"
 tar -xzf "dist/${snapshot_asset}" -C "$snapshot_dir"
 snapshot_version="$("$snapshot_dir/tnnl" version)"
-bash script/verify-release-artifacts.sh "v${snapshot_version}" dist "$snapshot_asset"
+bash script/verify-release-artifacts.sh --allow-snapshot "v${snapshot_version}" dist "$snapshot_asset"
 rm -rf "$snapshot_dir"
 ```
 

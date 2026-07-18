@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-usage="usage: verify-release-artifacts.sh vX.Y.Z DIST_DIR ASSET_NAME"
+usage="usage: verify-release-artifacts.sh [--allow-snapshot] vX.Y.Z DIST_DIR ASSET_NAME"
+allow_snapshot=0
+if [[ "${1:-}" == "--allow-snapshot" ]]; then
+  allow_snapshot=1
+  shift
+fi
 if (($# != 3)); then
   echo "$usage" >&2
   exit 2
@@ -11,8 +16,15 @@ tag="$1"
 dist="$2"
 asset="$3"
 
-if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "invalid release tag: $tag (want vX.Y.Z)" >&2
+valid_tag=0
+if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  valid_tag=1
+elif ((allow_snapshot == 1)) &&
+  [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-SNAPSHOT-[0-9A-Za-z][0-9A-Za-z.-]*$ ]]; then
+  valid_tag=1
+fi
+if ((valid_tag == 0)); then
+  echo "invalid release tag: $tag (want vX.Y.Z; snapshots require --allow-snapshot)" >&2
   exit 1
 fi
 if [[ ! -d "$dist" ]]; then
