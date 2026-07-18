@@ -32,7 +32,12 @@ func newUpdateCommand(run updateRunner) *cobra.Command {
 	return &cobra.Command{
 		Use:   "update",
 		Short: "Install the latest checksum-verified tnnl release",
-		Args:  cobra.NoArgs,
+		Long: "Install the latest tnnl release after verifying its SHA-256 checksum and\n" +
+			"candidate version. Verification completes before replacement. The candidate is\n" +
+			"staged beside the current executable for same-directory atomic replacement, so\n" +
+			"write permission to the executable directory is required.",
+		Example: "  tnnl update",
+		Args:    cobra.NoArgs,
 		RunE: func(command *cobra.Command, args []string) error {
 			return run(command.Context(), command.OutOrStdout())
 		},

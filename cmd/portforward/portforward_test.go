@@ -1,6 +1,7 @@
 package portforward
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/wim-web/tnnl/internal/input"
 )
 
@@ -152,6 +154,33 @@ func TestPortforwardCommandInputFileHelpNamesParent(t *testing.T) {
 	}
 	if !strings.Contains(flag.Usage, "tnnl portforward make-input-file") {
 		t.Fatalf("input-file usage = %q, want parent-specific generator", flag.Usage)
+	}
+}
+
+func TestPortforwardHelpDocumentsInputAndAutomaticLocalPort(t *testing.T) {
+	command := newPortforwardCommand(func(context.Context, input.PortForwardInput) error { return nil })
+
+	assertHelpContains(t, command,
+		"tnnl portforward make-input-file",
+		"automatic local-port selection",
+		"omitted or the zero value",
+		"explicit flag > input JSON > default",
+	)
+}
+
+func assertHelpContains(t *testing.T, command *cobra.Command, values ...string) {
+	t.Helper()
+
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(&output)
+	if err := command.Help(); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range values {
+		if !strings.Contains(output.String(), value) {
+			t.Errorf("help does not contain %q:\n%s", value, output.String())
+		}
 	}
 }
 

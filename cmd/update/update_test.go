@@ -1,6 +1,7 @@
 package update
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/wim-web/tnnl/internal/buildinfo"
 )
 
@@ -18,6 +20,33 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+func TestUpdateHelpDocumentsVerificationAndReplacement(t *testing.T) {
+	command := newUpdateCommand(func(context.Context, io.Writer) error { return nil })
+
+	assertHelpContains(t, command,
+		"SHA-256 checksum",
+		"candidate version",
+		"same-directory atomic replacement",
+		"write permission",
+	)
+}
+
+func assertHelpContains(t *testing.T, command *cobra.Command, values ...string) {
+	t.Helper()
+
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(&output)
+	if err := command.Help(); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range values {
+		if !strings.Contains(output.String(), value) {
+			t.Errorf("help does not contain %q:\n%s", value, output.String())
+		}
+	}
 }
 
 func TestFetchLatestReleaseUsesInjectedClientWithoutAuthorization(t *testing.T) {

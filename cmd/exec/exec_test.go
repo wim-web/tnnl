@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/wim-web/tnnl/internal/input"
 )
 
@@ -86,6 +88,32 @@ func TestExecCommandInputFileHelpNamesParent(t *testing.T) {
 	}
 	if !strings.Contains(flag.Usage, "tnnl exec make-input-file") {
 		t.Fatalf("input-file usage = %q, want parent-specific generator", flag.Usage)
+	}
+}
+
+func TestExecHelpDocumentsWaitAndInputPrecedence(t *testing.T) {
+	command := newExecCommand(func(context.Context, input.ExecInput) error { return nil })
+
+	assertHelpContains(t, command,
+		"--wait 0 performs one logical eligibility lookup",
+		"positive --wait polls readiness after cluster selection",
+		"explicit flag > input JSON > default",
+	)
+}
+
+func assertHelpContains(t *testing.T, command *cobra.Command, values ...string) {
+	t.Helper()
+
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(&output)
+	if err := command.Help(); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range values {
+		if !strings.Contains(output.String(), value) {
+			t.Errorf("help does not contain %q:\n%s", value, output.String())
+		}
 	}
 }
 

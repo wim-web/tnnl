@@ -10,9 +10,12 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:           "tnnl",
-	Short:         "Use ECS Exec and port forwarding through AWS Systems Manager Session Manager",
-	Long:          "tnnl is a CLI for running ECS Exec sessions and port forwarding through AWS Systems Manager Session Manager.",
+	Use:   "tnnl",
+	Short: "Use ECS Exec and port forwarding through AWS Systems Manager Session Manager",
+	Long: "tnnl selects a ready ECS task and container for exec or port forwarding.\n" +
+		"AWS credentials and Region come from the AWS SDK default configuration chain; set\n" +
+		"AWS_PROFILE/AWS_REGION or run through tools such as `aws-vault exec NAME -- tnnl ...`.\n" +
+		"session-manager-plugin (Session Manager Plugin) must be installed and available on PATH.",
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {

@@ -136,6 +136,19 @@ func TestRootCommandMetadataAndFlags(t *testing.T) {
 	}
 }
 
+func TestRootHelpDocumentsAWSSetup(t *testing.T) {
+	prepareRootCommandTest(t, []string{}, io.Discard, io.Discard)
+
+	assertHelpContains(t, RootCmd,
+		"AWS SDK default configuration chain",
+		"AWS_PROFILE",
+		"AWS_REGION",
+		"`aws-vault exec NAME -- tnnl ...`",
+		"session-manager-plugin",
+		"PATH",
+	)
+}
+
 func TestVersionDefaultsToBuildInfo(t *testing.T) {
 	if got, want := Version, buildinfo.Current(); got != want {
 		t.Fatalf("Version = %q, want buildinfo.Current() %q", got, want)
@@ -235,6 +248,22 @@ func prepareRootCommandTest(t *testing.T, args []string, stdout, stderr io.Write
 			versionFlag.Changed = versionFlagChanged
 		}
 	})
+}
+
+func assertHelpContains(t *testing.T, command *cobra.Command, values ...string) {
+	t.Helper()
+
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(&output)
+	if err := command.Help(); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range values {
+		if !strings.Contains(output.String(), value) {
+			t.Errorf("help does not contain %q:\n%s", value, output.String())
+		}
+	}
 }
 
 type failingWriter struct {
