@@ -120,6 +120,11 @@ write_checksums
 
 expect_success "valid release" "v1.2.3" "$dist" "$asset"
 
+unlisted_asset="tnnl_unlisted.tar.gz"
+cp "$dist/$asset" "$dist/$unlisted_asset"
+expect_failure "unlisted publishable asset" "publishable release asset is not listed in checksum manifest" "v1.2.3" "$dist" "$asset"
+rm -f "$dist/$unlisted_asset"
+
 write_sidecar_checksum_only
 rm -f "$tar_called"
 expect_failure "asset missing from manifest" "release asset is not listed in checksum manifest" "v1.2.3" "$dist" "$asset"

@@ -41,6 +41,23 @@ if ((asset_listed == 0)); then
   exit 1
 fi
 
+for publishable_path in "$dist"/tnnl_*.tar.gz; do
+  [[ -e "$publishable_path" ]] || continue
+  publishable_asset="${publishable_path##*/}"
+  publishable_listed=0
+  while IFS= read -r manifest_line || [[ -n "$manifest_line" ]]; do
+    if [[ "$manifest_line" =~ ^[[:xdigit:]]{64}[[:space:]]+[*]?(.+)$ ]] &&
+      [[ "${BASH_REMATCH[1]}" == "$publishable_asset" ]]; then
+      publishable_listed=1
+      break
+    fi
+  done <"$dist/checksums.txt"
+  if ((publishable_listed == 0)); then
+    echo "publishable release asset is not listed in checksum manifest: $publishable_asset" >&2
+    exit 1
+  fi
+done
+
 if command -v sha256sum >/dev/null 2>&1; then
   (cd "$dist" && sha256sum -c checksums.txt)
 elif command -v shasum >/dev/null 2>&1; then
