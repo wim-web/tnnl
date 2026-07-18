@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,78 +26,126 @@ const (
 	binaryName       = "tnnl"
 )
 
-var UpdateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update tnnl to the latest release",
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := updateCLI(); err != nil {
-			log.Fatalln(err)
-		}
-	},
+type updateRunner func(context.Context, io.Writer) error
+
+func newUpdateCommand(run updateRunner) *cobra.Command {
+	return &cobra.Command{
+		Use:   "update",
+		Short: "Install the latest checksum-verified tnnl release",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, args []string) error {
+			return run(command.Context(), command.OutOrStdout())
+		},
+	}
 }
+
+var UpdateCmd = newUpdateCommand(func(ctx context.Context, out io.Writer) error {
+	return productionUpdater().run(ctx, out)
+})
 
 type release struct {
 	TagName         string
 	DownloadBaseURL string
 }
 
+type updater struct {
+	client         *http.Client
+	latestURL      string
+	goos           string
+	goarch         string
+	executablePath func() (string, error)
+}
+
 func init() {
 	cmd.RootCmd.AddCommand(UpdateCmd)
 }
 
-func updateCLI() error {
-	exePath, err := resolveTargetExecutablePath()
+func productionUpdater() updater {
+	return updater{
+		client:         http.DefaultClient,
+		latestURL:      latestReleaseURL,
+		goos:           runtime.GOOS,
+		goarch:         runtime.GOARCH,
+		executablePath: resolveTargetExecutablePath,
+	}
+}
+
+func (u updater) run(ctx context.Context, out io.Writer) error {
+	if u.executablePath == nil {
+		return fmt.Errorf("resolve executable: resolver is nil")
+	}
+	executable, err := u.executablePath()
+	if err != nil {
+		return fmt.Errorf("resolve executable: %w", err)
+	}
+
+	latest, err := fetchLatestRelease(ctx, u.client, u.latestURL)
 	if err != nil {
 		return err
 	}
 
-	latest, err := fetchLatestRelease(context.Background(), http.DefaultClient, latestReleaseURL)
+	current, err := currentVersion(ctx, executable)
 	if err != nil {
-		return err
-	}
-
-	current, err := currentVersion(context.Background(), exePath)
-	if err != nil {
-		return err
+		return fmt.Errorf("determine current version: %w", err)
 	}
 	latestVersion := normalizeVersion(latest.TagName)
-	if current != "" && current == latestVersion {
-		fmt.Printf("already latest version: %s\n", latest.TagName)
+	if current == latestVersion {
+		if _, err := fmt.Fprintf(out, "already latest version: %s\n", latest.TagName); err != nil {
+			return fmt.Errorf("write update status: %w", err)
+		}
 		return nil
 	}
 
-	assetName := fmt.Sprintf("%s_%s_%s.tar.gz", binaryName, runtime.GOOS, runtime.GOARCH)
-	assetURL, err := latest.assetURL(assetName)
+	assetName := fmt.Sprintf("%s_%s_%s.tar.gz", binaryName, u.goos, u.goarch)
+	archiveURL, err := latest.assetURL(assetName)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve release archive URL: %w", err)
+	}
+	checksumURL, err := latest.assetURL("checksums.txt")
+	if err != nil {
+		return fmt.Errorf("resolve checksum manifest URL: %w", err)
 	}
 
 	tmpDir, err := os.MkdirTemp("", "tnnl-update-*")
 	if err != nil {
-		return err
+		return fmt.Errorf("create update directory: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
 	archivePath := filepath.Join(tmpDir, assetName)
-	if err := downloadFile(context.Background(), http.DefaultClient, assetURL, archivePath); err != nil {
+	if err := downloadFile(ctx, u.client, archiveURL, archivePath); err != nil {
+		return fmt.Errorf("download release archive: %w", err)
+	}
+	manifestPath := filepath.Join(tmpDir, "checksums.txt")
+	if err := downloadFile(ctx, u.client, checksumURL, manifestPath); err != nil {
+		return fmt.Errorf("download checksum manifest: %w", err)
+	}
+	manifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("read checksum manifest: %w", err)
+	}
+	wantChecksum, err := checksumForAsset(manifest, assetName)
+	if err != nil {
+		return fmt.Errorf("select release archive checksum: %w", err)
+	}
+	if err := verifyFileSHA256(archivePath, wantChecksum); err != nil {
 		return err
 	}
 
-	extractedPath := filepath.Join(tmpDir, binaryName)
-	if err := extractBinaryFromArchive(archivePath, extractedPath); err != nil {
+	candidatePath := filepath.Join(tmpDir, binaryName)
+	if err := extractBinaryFromArchive(archivePath, candidatePath); err != nil {
+		return fmt.Errorf("extract candidate executable: %w", err)
+	}
+	if err := verifyCandidateVersion(ctx, candidatePath, latest.TagName); err != nil {
+		return err
+	}
+	if err := replaceExecutable(executable, candidatePath); err != nil {
 		return err
 	}
 
-	if err := replaceExecutable(exePath, extractedPath); err != nil {
-		return err
+	if _, err := fmt.Fprintf(out, "updated: v%s -> %s\n", current, latest.TagName); err != nil {
+		return fmt.Errorf("write update status: %w", err)
 	}
-
-	if current == "" {
-		fmt.Printf("updated to %s\n", latest.TagName)
-		return nil
-	}
-
-	fmt.Printf("updated: v%s -> %s\n", current, latest.TagName)
 	return nil
 }
 
