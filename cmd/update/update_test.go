@@ -1,12 +1,17 @@
 package update
 
 import (
+	"context"
+	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
-	"github.com/wim-web/tnnl/cmd"
+	"github.com/wim-web/tnnl/internal/buildinfo"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -15,15 +20,10 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-func TestFetchLatestReleaseUsesLatestReleaseRedirect(t *testing.T) {
-	originalClient := http.DefaultClient
-	t.Cleanup(func() {
-		http.DefaultClient = originalClient
-	})
-
-	http.DefaultClient = &http.Client{
+func TestFetchLatestReleaseUsesInjectedClientWithoutAuthorization(t *testing.T) {
+	client := &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if got, want := req.URL.String(), latestReleaseURL; got != want {
+			if got, want := req.URL.String(), "https://example.test/proxy/releases/latest"; got != want {
 				t.Fatalf("request URL = %q, want %q", got, want)
 			}
 			if got := req.Header.Get("Authorization"); got != "" {
@@ -34,18 +34,117 @@ func TestFetchLatestReleaseUsesLatestReleaseRedirect(t *testing.T) {
 				StatusCode: http.StatusFound,
 				Body:       http.NoBody,
 				Header: http.Header{
-					"Location": []string{"https://github.com/wim-web/tnnl/releases/tag/v1.2.3"},
+					"Location": []string{"https://downloads.example.test/proxy/releases/tag/v1.2.3?ignored=1#ignored"},
 				},
 			}, nil
 		}),
 	}
 
-	got, err := fetchLatestRelease()
+	got, err := fetchLatestRelease(context.Background(), client, "https://example.test/proxy/releases/latest")
 	if err != nil {
 		t.Fatalf("fetchLatestRelease() error = %v", err)
 	}
 	if want := "v1.2.3"; got.TagName != want {
 		t.Fatalf("fetchLatestRelease().TagName = %q, want %q", got.TagName, want)
+	}
+	if got, want := got.DownloadBaseURL, "https://downloads.example.test/proxy/releases/download/v1.2.3"; got != want {
+		t.Fatalf("fetchLatestRelease().DownloadBaseURL = %q, want %q", got, want)
+	}
+}
+
+func TestFetchLatestReleaseDoesNotMutateInjectedClient(t *testing.T) {
+	sentinel := errors.New("original redirect policy")
+	policyCalled := false
+	client := &http.Client{
+		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Body:       http.NoBody,
+				Header:     http.Header{"Location": []string{"https://example.test/releases/tag/v1.2.3"}},
+			}, nil
+		}),
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			policyCalled = true
+			return sentinel
+		},
+	}
+
+	if _, err := fetchLatestRelease(context.Background(), client, "https://example.test/releases/latest"); err != nil {
+		t.Fatalf("fetchLatestRelease() error = %v", err)
+	}
+	if policyCalled {
+		t.Fatal("injected redirect policy was called for the latest-release probe")
+	}
+	if err := client.CheckRedirect(&http.Request{}, nil); !errors.Is(err, sentinel) {
+		t.Fatalf("injected client CheckRedirect error = %v, want sentinel", err)
+	}
+	if !policyCalled {
+		t.Fatal("injected client redirect policy was replaced")
+	}
+}
+
+func TestFetchLatestReleaseRejectsUserinfoBeforeRequest(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("transport called for URL containing userinfo")
+		return nil, nil
+	})}
+
+	_, err := fetchLatestRelease(context.Background(), client, "https://user:password@example.test/releases/latest")
+	if err == nil || !strings.Contains(err.Error(), "userinfo") {
+		t.Fatalf("fetchLatestRelease() error = %v, want userinfo rejection", err)
+	}
+}
+
+func TestFetchLatestReleasePreservesCallerCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := fetchLatestRelease(ctx, &http.Client{}, "https://example.test/releases/latest")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("fetchLatestRelease() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestReleaseFromLatestLocation(t *testing.T) {
+	got, err := releaseFromLatestLocation("https://example.test/proxy%2Ftenant/releases/tag/v1%2Frc%252F1?ignored=1#ignored")
+	if err != nil {
+		t.Fatalf("releaseFromLatestLocation() error = %v", err)
+	}
+	if got, want := got.TagName, "v1/rc%2F1"; got != want {
+		t.Fatalf("TagName = %q, want %q", got, want)
+	}
+	if got, want := got.DownloadBaseURL, "https://example.test/proxy%2Ftenant/releases/download/v1%2Frc%252F1"; got != want {
+		t.Fatalf("DownloadBaseURL = %q, want %q", got, want)
+	}
+
+	got, err = releaseFromLatestLocation("HTTPS://example.test/releases/tag/v1.2.3")
+	if err != nil {
+		t.Fatalf("releaseFromLatestLocation() uppercase scheme error = %v", err)
+	}
+	if got, want := got.DownloadBaseURL, "https://example.test/releases/download/v1.2.3"; got != want {
+		t.Fatalf("uppercase scheme DownloadBaseURL = %q, want %q", got, want)
+	}
+}
+
+func TestReleaseFromLatestLocationRejectsUnsafeOrAmbiguousURL(t *testing.T) {
+	for _, location := range []string{
+		"",
+		"/releases/tag/v1.2.3",
+		"//example.test/releases/tag/v1.2.3",
+		"ftp://example.test/releases/tag/v1.2.3",
+		"https:/releases/tag/v1.2.3",
+		"https://user:password@example.test/releases/tag/v1.2.3",
+		"https://example.test/releases/latest",
+		"https://example.test/releases/tag/",
+		"https://example.test/releases/tag/v1.2.3/extra",
+		"https://example.test/%2Freleases%2Ftag%2Fv1.2.3",
+		"https://example.test/releases/tag/%zz",
+	} {
+		t.Run(location, func(t *testing.T) {
+			if _, err := releaseFromLatestLocation(location); err == nil {
+				t.Fatalf("releaseFromLatestLocation(%q) error = nil", location)
+			}
+		})
 	}
 }
 
@@ -140,21 +239,128 @@ func TestCurrentVersion_FromBinary(t *testing.T) {
 		t.Fatalf("WriteFile() error: %v", err)
 	}
 
-	got := currentVersion(scriptPath)
+	got, err := currentVersion(context.Background(), scriptPath)
+	if err != nil {
+		t.Fatalf("currentVersion() error = %v", err)
+	}
 	if want := "9.9.9"; got != want {
 		t.Fatalf("currentVersion() = %q, want %q", got, want)
 	}
 }
 
 func TestCurrentVersion_FallbackToEmbedded(t *testing.T) {
-	before := cmd.Version
-	cmd.Version = "v1.2.3"
-	t.Cleanup(func() {
-		cmd.Version = before
-	})
-
-	got := currentVersion("/path/not/found/tnnl")
-	if want := "1.2.3"; got != want {
+	got, err := currentVersion(context.Background(), "/path/not/found/tnnl")
+	if err != nil {
+		t.Fatalf("currentVersion() error = %v", err)
+	}
+	if want := normalizeVersion(buildinfo.Current()); got != want {
 		t.Fatalf("currentVersion() = %q, want %q", got, want)
+	}
+}
+
+func TestCurrentVersionPreservesCallerCancellation(t *testing.T) {
+	scriptPath := filepath.Join(t.TempDir(), "tnnl")
+	startedPath := filepath.Join(t.TempDir(), "started")
+	script := "#!/bin/sh\nprintf started > \"$UPDATE_CURRENT_VERSION_STARTED\"\nexec sleep 30\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("UPDATE_CURRENT_VERSION_STARTED", startedPath)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := currentVersion(ctx, scriptPath)
+		errCh <- err
+	}()
+	if err := waitForCandidateHelper(startedPath, candidateHelperSyncLimit); err != nil {
+		cancel()
+		t.Fatalf("wait for version probe: %v", err)
+	}
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("currentVersion() error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("currentVersion() did not return promptly after cancellation")
+	}
+}
+
+func TestReadBinaryVersionBoundsInheritedStdoutPipeCleanup(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	startedPath := filepath.Join(t.TempDir(), "started")
+	t.Setenv(candidateHelperModeEnv, candidateHelperModeParent)
+	t.Setenv(candidateHelperStartedEnv, startedPath)
+	ctx := newManualDeadlineContext()
+	t.Cleanup(ctx.expire)
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := readBinaryVersion(ctx, executable)
+		errCh <- err
+	}()
+	if err := waitForCandidateHelper(startedPath, candidateHelperSyncLimit); err != nil {
+		ctx.expire()
+		t.Fatalf("wait for version helper: %v", err)
+	}
+	started := time.Now()
+	ctx.expire()
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("readBinaryVersion() error = %v, want context.DeadlineExceeded", err)
+		}
+		if elapsed := time.Since(started); elapsed >= 500*time.Millisecond {
+			t.Fatalf("readBinaryVersion() elapsed = %v, want < 500ms", elapsed)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("readBinaryVersion() did not return promptly")
+	}
+}
+
+func TestDownloadFileUsesInjectedClientWithoutAuthorization(t *testing.T) {
+	destPath := filepath.Join(t.TempDir(), "asset")
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.Header.Get("Authorization"); got != "" {
+			t.Fatalf("Authorization header = %q, want empty", got)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("asset contents")),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	if err := downloadFile(context.Background(), client, "https://example.test/asset", destPath); err != nil {
+		t.Fatalf("downloadFile() error = %v", err)
+	}
+	contents, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(contents), "asset contents"; got != want {
+		t.Fatalf("downloaded contents = %q, want %q", got, want)
+	}
+}
+
+func TestDownloadFilePreservesCallerCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	destPath := filepath.Join(t.TempDir(), "asset")
+
+	err := downloadFile(ctx, &http.Client{}, "https://example.test/asset", destPath)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("downloadFile() error = %v, want context.Canceled", err)
+	}
+	if _, statErr := os.Stat(destPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("os.Stat(%q) error = %v, want os.ErrNotExist", destPath, statErr)
 	}
 }
