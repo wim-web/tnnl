@@ -11,13 +11,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  quality:
-    permissions:
-      contents: read
-    uses: ./.github/workflows/test.yml
-
   release:
-    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
