@@ -1,16 +1,21 @@
 ---
+version: 2
 project_name: tnnl
-archives:
-  - name_template: "{{.ProjectName}}_{{.Os}}_{{.Arch}}"
-before:
-  hooks:
-    - go mod tidy
 builds:
-  - binary: tnnl
-    main: main.go
-    goos:
-      - darwin
-      - linux
-    goarch:
-      - amd64
-      - arm64
+  - id: tnnl
+    main: .
+    binary: tnnl
+    env: [CGO_ENABLED=0]
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/wim-web/tnnl/internal/buildinfo.linkerVersion={{ .Version }}
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+archives:
+  - ids: [tnnl]
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256

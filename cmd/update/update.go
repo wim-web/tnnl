@@ -4,9 +4,9 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/wim-web/tnnl/cmd"
+	"github.com/wim-web/tnnl/internal/buildinfo"
 )
 
 const (
@@ -25,100 +26,163 @@ const (
 	binaryName       = "tnnl"
 )
 
-var UpdateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update tnnl to the latest release",
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := updateCLI(); err != nil {
-			log.Fatalln(err)
-		}
-	},
+type updateRunner func(context.Context, io.Writer) error
+
+func newUpdateCommand(run updateRunner) *cobra.Command {
+	return &cobra.Command{
+		Use:   "update",
+		Short: "Install the latest checksum-verified tnnl release",
+		Long: "Install the latest tnnl release after verifying its SHA-256 checksum and\n" +
+			"candidate version. Verification completes before replacement. The candidate is\n" +
+			"staged beside the current executable for same-directory atomic replacement, so\n" +
+			"write permission to the executable directory is required.",
+		Example: "  tnnl update",
+		Args:    cobra.NoArgs,
+		RunE: func(command *cobra.Command, args []string) error {
+			return run(command.Context(), command.OutOrStdout())
+		},
+	}
 }
+
+var UpdateCmd = newUpdateCommand(func(ctx context.Context, out io.Writer) error {
+	return productionUpdater().run(ctx, out)
+})
 
 type release struct {
 	TagName         string
 	DownloadBaseURL string
 }
 
+type updater struct {
+	client         *http.Client
+	latestURL      string
+	goos           string
+	goarch         string
+	executablePath func() (string, error)
+}
+
 func init() {
 	cmd.RootCmd.AddCommand(UpdateCmd)
 }
 
-func updateCLI() error {
-	exePath, err := resolveTargetExecutablePath()
+func productionUpdater() updater {
+	return updater{
+		client:         http.DefaultClient,
+		latestURL:      latestReleaseURL,
+		goos:           runtime.GOOS,
+		goarch:         runtime.GOARCH,
+		executablePath: resolveTargetExecutablePath,
+	}
+}
+
+func (u updater) run(ctx context.Context, out io.Writer) error {
+	if u.executablePath == nil {
+		return fmt.Errorf("resolve executable: resolver is nil")
+	}
+	executable, err := u.executablePath()
+	if err != nil {
+		return fmt.Errorf("resolve executable: %w", err)
+	}
+
+	latest, err := fetchLatestRelease(ctx, u.client, u.latestURL)
 	if err != nil {
 		return err
 	}
 
-	latest, err := fetchLatestRelease()
+	current, err := currentVersion(ctx, executable)
 	if err != nil {
-		return err
+		return fmt.Errorf("determine current version: %w", err)
 	}
-
-	current := currentVersion(exePath)
 	latestVersion := normalizeVersion(latest.TagName)
-	if current != "" && current == latestVersion {
-		fmt.Printf("already latest version: %s\n", latest.TagName)
+	if current == latestVersion {
+		if _, err := fmt.Fprintf(out, "already latest version: %s\n", latest.TagName); err != nil {
+			return fmt.Errorf("write update status: %w", err)
+		}
 		return nil
 	}
 
-	assetName := fmt.Sprintf("%s_%s_%s.tar.gz", binaryName, runtime.GOOS, runtime.GOARCH)
-	assetURL, err := latest.assetURL(assetName)
+	assetName := fmt.Sprintf("%s_%s_%s.tar.gz", binaryName, u.goos, u.goarch)
+	archiveURL, err := latest.assetURL(assetName)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve release archive URL: %w", err)
+	}
+	checksumURL, err := latest.assetURL("checksums.txt")
+	if err != nil {
+		return fmt.Errorf("resolve checksum manifest URL: %w", err)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "tnnl-update-*")
+	tmpDir, err := os.MkdirTemp(filepath.Dir(executable), ".tnnl-update-*")
 	if err != nil {
-		return err
+		return fmt.Errorf("create update directory: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
 	archivePath := filepath.Join(tmpDir, assetName)
-	if err := downloadFile(assetURL, archivePath); err != nil {
+	if err := downloadFile(ctx, u.client, archiveURL, archivePath); err != nil {
+		return fmt.Errorf("download release archive: %w", err)
+	}
+	manifestPath := filepath.Join(tmpDir, "checksums.txt")
+	if err := downloadFile(ctx, u.client, checksumURL, manifestPath); err != nil {
+		return fmt.Errorf("download checksum manifest: %w", err)
+	}
+	manifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("read checksum manifest: %w", err)
+	}
+	wantChecksum, err := checksumForAsset(manifest, assetName)
+	if err != nil {
+		return fmt.Errorf("select release archive checksum: %w", err)
+	}
+	if err := verifyFileSHA256(archivePath, wantChecksum); err != nil {
 		return err
 	}
 
-	extractedPath := filepath.Join(tmpDir, binaryName)
-	if err := extractBinaryFromArchive(archivePath, extractedPath); err != nil {
+	candidatePath := filepath.Join(tmpDir, binaryName)
+	if err := extractBinaryFromArchive(archivePath, candidatePath); err != nil {
+		return fmt.Errorf("extract candidate executable: %w", err)
+	}
+	if err := verifyCandidateVersion(ctx, candidatePath, latest.TagName); err != nil {
+		return err
+	}
+	if err := replaceExecutable(executable, candidatePath); err != nil {
 		return err
 	}
 
-	if err := replaceExecutable(exePath, extractedPath); err != nil {
-		return err
+	if _, err := fmt.Fprintf(out, "updated: v%s -> %s\n", current, latest.TagName); err != nil {
+		return fmt.Errorf("write update status: %w", err)
 	}
-
-	if current == "" {
-		fmt.Printf("updated to %s\n", latest.TagName)
-		return nil
-	}
-
-	fmt.Printf("updated: v%s -> %s\n", current, latest.TagName)
 	return nil
 }
 
-func fetchLatestRelease() (release, error) {
-	return fetchLatestReleaseFromRedirect()
-}
-
-func fetchLatestReleaseFromRedirect() (release, error) {
-	reqCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, latestReleaseURL, nil)
-	if err != nil {
+func fetchLatestRelease(ctx context.Context, client *http.Client, latestURL string) (release, error) {
+	if client == nil {
+		return release{}, fmt.Errorf("fetch latest release: HTTP client is nil")
+	}
+	if _, err := parsePublicHTTPURL(latestURL, "latest release URL"); err != nil {
 		return release{}, err
 	}
-	req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", binaryName, cmd.Version))
 
-	client := *http.DefaultClient
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, latestURL, nil)
+	if err != nil {
+		return release{}, fmt.Errorf("create latest release request: %w", err)
+	}
+	req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", binaryName, buildinfo.Current()))
+
+	redirectClient := *client
+	redirectClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
 
-	res, err := client.Do(req)
+	res, err := redirectClient.Do(req)
 	if err != nil {
-		return release{}, err
+		requestErr := fmt.Errorf("fetch latest release: %w", err)
+		if contextErr := reqCtx.Err(); contextErr != nil {
+			return release{}, errors.Join(requestErr, contextErr)
+		}
+		return release{}, requestErr
 	}
 	defer res.Body.Close()
 
@@ -127,44 +191,76 @@ func fetchLatestReleaseFromRedirect() (release, error) {
 		return release{}, fmt.Errorf("failed to fetch latest release redirect: status=%d body=%s", res.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	tagName, err := releaseTagFromLatestLocation(res.Header.Get("Location"))
+	latest, err := releaseFromLatestLocation(res.Header.Get("Location"))
+	if err != nil {
+		return release{}, fmt.Errorf("parse latest release redirect: %w", err)
+	}
+
+	return latest, nil
+}
+
+func releaseFromLatestLocation(location string) (release, error) {
+	if location == "" {
+		return release{}, fmt.Errorf("latest release redirect location is empty")
+	}
+
+	redirectURL, err := parsePublicHTTPURL(location, "latest release redirect location")
 	if err != nil {
 		return release{}, err
 	}
 
-	return release{
-		TagName:         tagName,
-		DownloadBaseURL: fmt.Sprintf("https://github.com/wim-web/tnnl/releases/download/%s", url.PathEscape(tagName)),
-	}, nil
-}
-
-func releaseTagFromLatestLocation(location string) (string, error) {
-	if location == "" {
-		return "", fmt.Errorf("latest release redirect location is empty")
-	}
-
-	u, err := url.Parse(location)
-	if err != nil {
-		return "", err
-	}
-
 	const marker = "/releases/tag/"
-	escapedPath := u.EscapedPath()
+	escapedPath := redirectURL.EscapedPath()
 	idx := strings.Index(escapedPath, marker)
 	if idx < 0 {
-		return "", fmt.Errorf("latest release redirect location does not contain release tag: %s", location)
+		return release{}, fmt.Errorf("latest release redirect location does not contain release tag: %s", location)
 	}
 
-	rawTagName := strings.TrimPrefix(escapedPath[idx:], marker)
-	tagName, err := url.PathUnescape(rawTagName)
+	escapedTagName := escapedPath[idx+len(marker):]
+	if escapedTagName == "" {
+		return release{}, fmt.Errorf("latest release tag is empty")
+	}
+	if strings.Contains(escapedTagName, "/") {
+		return release{}, fmt.Errorf("latest release tag must be one escaped path segment: %s", location)
+	}
+	tagName, err := url.PathUnescape(escapedTagName)
 	if err != nil {
-		return "", err
+		return release{}, fmt.Errorf("unescape latest release tag: %w", err)
 	}
 	if tagName == "" {
-		return "", fmt.Errorf("latest release tag is empty")
+		return release{}, fmt.Errorf("latest release tag is empty")
 	}
 
-	return tagName, nil
+	escapedDownloadPath := escapedPath[:idx] + "/releases/download/" + url.PathEscape(tagName)
+	downloadPath, err := url.PathUnescape(escapedDownloadPath)
+	if err != nil {
+		return release{}, fmt.Errorf("unescape release download path: %w", err)
+	}
+	downloadURL := &url.URL{
+		Scheme:  strings.ToLower(redirectURL.Scheme),
+		Host:    redirectURL.Host,
+		Path:    downloadPath,
+		RawPath: escapedDownloadPath,
+	}
+
+	return release{TagName: tagName, DownloadBaseURL: downloadURL.String()}, nil
+}
+
+func parsePublicHTTPURL(rawURL, description string) (*url.URL, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", description, err)
+	}
+	if !parsed.IsAbs() || (!strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https")) {
+		return nil, fmt.Errorf("%s must be an absolute HTTP(S) URL", description)
+	}
+	if parsed.Host == "" || parsed.Hostname() == "" {
+		return nil, fmt.Errorf("%s must include a host", description)
+	}
+	if parsed.User != nil {
+		return nil, fmt.Errorf("%s must not contain userinfo", description)
+	}
+	return parsed, nil
 }
 
 func (r release) assetURL(assetName string) (string, error) {
@@ -175,19 +271,30 @@ func (r release) assetURL(assetName string) (string, error) {
 	return "", fmt.Errorf("release asset not found: %s", assetName)
 }
 
-func downloadFile(url string, destPath string) error {
-	reqCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
-	if err != nil {
+func downloadFile(ctx context.Context, client *http.Client, assetURL, destPath string) error {
+	if client == nil {
+		return fmt.Errorf("download release asset: HTTP client is nil")
+	}
+	if _, err := parsePublicHTTPURL(assetURL, "release asset URL"); err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", binaryName, cmd.Version))
 
-	res, err := http.DefaultClient.Do(req)
+	reqCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, assetURL, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("create release asset request: %w", err)
+	}
+	req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", binaryName, buildinfo.Current()))
+
+	res, err := client.Do(req)
+	if err != nil {
+		downloadErr := fmt.Errorf("download release asset: %w", err)
+		if contextErr := reqCtx.Err(); contextErr != nil {
+			return errors.Join(downloadErr, contextErr)
+		}
+		return downloadErr
 	}
 	defer res.Body.Close()
 
@@ -198,12 +305,15 @@ func downloadFile(url string, destPath string) error {
 
 	f, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		return err
+		return fmt.Errorf("create downloaded release asset %q: %w", destPath, err)
 	}
-	defer f.Close()
 
 	if _, err := io.Copy(f, res.Body); err != nil {
-		return err
+		_ = f.Close()
+		return fmt.Errorf("write downloaded release asset %q: %w", destPath, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close downloaded release asset %q: %w", destPath, err)
 	}
 
 	return nil
@@ -259,58 +369,33 @@ func extractBinaryFromArchive(archivePath string, destPath string) error {
 	return fmt.Errorf("binary not found in archive: %s", binaryName)
 }
 
-func replaceExecutable(currentPath string, newBinaryPath string) error {
-	tmpPath := filepath.Join(filepath.Dir(currentPath), fmt.Sprintf(".%s.new", filepath.Base(currentPath)))
-
-	src, err := os.Open(newBinaryPath)
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-
-	dst, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
-	if err != nil {
-		return err
-	}
-
-	_, copyErr := io.Copy(dst, src)
-	closeErr := dst.Close()
-	if copyErr != nil {
-		_ = os.Remove(tmpPath)
-		return copyErr
-	}
-	if closeErr != nil {
-		_ = os.Remove(tmpPath)
-		return closeErr
-	}
-
-	if err := os.Rename(tmpPath, currentPath); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to replace executable (%s). check write permission: %w", currentPath, err)
-	}
-
-	return nil
-}
-
 func normalizeVersion(v string) string {
 	return strings.TrimPrefix(strings.TrimSpace(v), "v")
 }
 
-func currentVersion(exePath string) string {
-	if v, err := readBinaryVersion(exePath); err == nil && v != "" {
-		return v
+func currentVersion(ctx context.Context, exePath string) (string, error) {
+	if version, err := readBinaryVersion(ctx, exePath); err == nil {
+		return version, nil
+	} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return "", err
 	}
 
-	return normalizeVersion(cmd.Version)
+	return normalizeVersion(buildinfo.Current()), nil
 }
 
-func readBinaryVersion(exePath string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func readBinaryVersion(ctx context.Context, exePath string) (string, error) {
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	output, err := exec.CommandContext(ctx, exePath, "version").Output()
+	probe := exec.CommandContext(probeCtx, exePath, "version")
+	probe.WaitDelay = candidateVersionWaitDelay
+	output, err := probe.Output()
 	if err != nil {
-		return "", err
+		probeErr := fmt.Errorf("run installed binary version: %w", err)
+		if contextErr := probeCtx.Err(); contextErr != nil {
+			return "", errors.Join(probeErr, contextErr)
+		}
+		return "", probeErr
 	}
 
 	version := normalizeVersion(string(output))
