@@ -1,32 +1,58 @@
-name: Test
+name: Quality
 
 on:
   pull_request:
+  push:
+    branches: [main]
+  workflow_call:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
-  group: test-${{ github.workflow }}-${{ github.ref }}
+  group: quality-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
 
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-    - name: Install aqua
-      uses: aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e # v4.0.5
-      with:
-        aqua_version: v2.60.1
-        enable_aqua_install: true
-        aqua_opts: ""
+      - name: Install pinned tools
+        uses: aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e # v4.0.5
+        with:
+          aqua_version: v2.60.1
+          enable_aqua_install: true
+          aqua_opts: ""
 
-    - name: Install dependencies
-      run: go mod download
+      - name: Download Go modules
+        run: go mod download
 
-    - name: Run tests
-      run: go test -v -race ./...
+      - name: Validate workflows and release config
+        run: |
+          actionlint
+          goreleaser check
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test with race detector
+        run: go test -race -count=1 ./...
+
+      - name: Build development binary
+        run: |
+          go build -trimpath -o "$RUNNER_TEMP/tnnl" .
+          test "$("$RUNNER_TEMP/tnnl" version)" = dev
+
+      - name: Check product documentation
+        run: bash script/check-docs.sh
+
+      - name: Test release artifact verifier
+        run: bash script/verify-release-artifacts_test.sh
