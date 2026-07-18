@@ -219,7 +219,7 @@ func TestReplaceExecutablePreservesLegacySentinel(t *testing.T) {
 	if !os.SameFile(sentinelBefore, sentinelAfter) {
 		t.Fatal("legacy sentinel was replaced")
 	}
-	if got, want := sentinelAfter.Mode().Perm(), os.FileMode(0o640); got != want {
+	if got, want := sentinelAfter.Mode().Perm(), sentinelBefore.Mode().Perm(); got != want {
 		t.Fatalf("legacy sentinel mode = %o, want %o", got, want)
 	}
 	content, err := os.ReadFile(sentinelPath)
