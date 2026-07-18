@@ -106,7 +106,7 @@ func (u updater) run(ctx context.Context, out io.Writer) error {
 		return fmt.Errorf("resolve checksum manifest URL: %w", err)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "tnnl-update-*")
+	tmpDir, err := os.MkdirTemp(filepath.Dir(executable), ".tnnl-update-*")
 	if err != nil {
 		return fmt.Errorf("create update directory: %w", err)
 	}

@@ -58,6 +58,24 @@ func TestUpdaterInstallsOnlyAfterVerification(t *testing.T) {
 	}
 }
 
+func TestUpdaterStagesCandidateBesideExecutable(t *testing.T) {
+	fixture := newUpdaterFixture(t, "1.0.0", "1.2.3")
+	unavailableSystemTemp := filepath.Join(t.TempDir(), "missing")
+	t.Setenv("TMPDIR", unavailableSystemTemp)
+
+	if err := fixture.updater().run(context.Background(), io.Discard); err != nil {
+		t.Fatalf("updater.run() error = %v; staging must not depend on system temp: %s", err, unavailableSystemTemp)
+	}
+
+	contents, err := os.ReadFile(fixture.currentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(contents, fixture.candidate) {
+		t.Fatalf("installed contents = %q, want candidate %q", contents, fixture.candidate)
+	}
+}
+
 func TestUpdaterLeavesExecutableUntouchedOnChecksumMismatch(t *testing.T) {
 	fixture := newUpdaterFixture(t, "1.0.0", "1.2.3")
 	fixture.manifest = []byte(strings.Repeat("0", sha256.Size*2) + "  " + testAssetName + "\n")
