@@ -93,7 +93,7 @@ aws-vault exec dev -- env AWS_REGION=ap-northeast-1 tnnl exec
 
 ~~~bash
 aws sts get-caller-identity
-aws configure get region
+aws configure list
 session-manager-plugin --version
 ~~~
 
@@ -138,8 +138,9 @@ Customer managed KMS keyによるECS Exec暗号化を使う場合は、task role
 権限と前提条件の一次資料:
 
 - [Amazon ECS Exec](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html)
+- [Session Manager prerequisites](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-prerequisites.html)
 - [Amazon ECS task IAM role: ECS Exec permissions](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html#ecs-exec-permissions)
-- [ECS actions, resources, and condition keys](https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonelasticcontainerservice.html)
+- [ECS actions, resources, and condition keys](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html)
 - [SSM actions, resources, and condition keys](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ssm.html)
 
 ## Target readinessと選択表示
@@ -286,7 +287,7 @@ signature（署名）ではありません。`tnnl update`はsignature verificat
 
 | 症状 | 主な原因 | 次に確認するコマンド・設定 |
 | --- | --- | --- |
-| credentialsまたはRegionが見つからない | caller-owned AWS contextが未設定、profile名違い、Region未設定 | `aws sts get-caller-identity`と`aws configure get region`を実行し、`AWS_PROFILE`、`AWS_REGION`または共有AWS configを修正する |
+| credentialsまたはRegionが見つからない | caller-owned AWS contextが未設定、profile名違い、Region未設定 | `aws sts get-caller-identity`と`aws configure list`を実行し、effectiveなprofile・Region・取得元を確認して、`AWS_PROFILE`、`AWS_REGION`または共有AWS configを修正する |
 | plugin not found、またはversion check失敗 | Session Manager Pluginが未導入、古い、`PATH`外 | `command -v session-manager-plugin`と`session-manager-plugin --version`を実行し、AWS公式install手順で導入・更新する |
 | `AccessDenied` | caller IAMまたはtask roleのaction/resource/condition不足 | `aws sts get-caller-identity`でprincipalを確定し、errorに出たactionを上のCaller IAM/task role inventoryと照合する |
 | eligible taskがない | task停止、ECS Exec無効、service指定違い | `aws ecs list-tasks --cluster CLUSTER`で候補を確認し、続けて`aws ecs describe-tasks --cluster CLUSTER --tasks TASK_ID`を実行する |
@@ -295,4 +296,4 @@ signature（署名）ではありません。`tnnl update`はsignature verificat
 | local port conflict | explicit local portを別processがlisten中 | macOSでは`lsof -nP -iTCP:15432 -sTCP:LISTEN`、Linuxでは`ss -ltn`を確認する。必要なら`--local-port`を省略して自動選択する |
 | `checksum mismatch` | download破損、proxy/cache、release assetとmanifestの組み合わせ違い | 同じreleaseのassetと`checksums.txt`を再取得し、`sha256sum ASSET_NAME`または`shasum -a 256 ASSET_NAME`の結果をmanifestの対象行と比較してから`tnnl update`を再実行する |
 | `candidate version mismatch` | archiveのbinary versionとlatest tagが一致しない | `uname -s`、`uname -m`、`tnnl version`を確認し、GitHub Releasesのtagと対象assetを照合する |
-| executable directoryへのpermission failure | `tnnl`の親directoryに書き込み権限がない | `command -v tnnl`と`ls -ld "$(dirname "$(command -v tnnl)")"`を確認し、user-ownedな`PATH`へ再配置するか適切なdirectory権限で実行する |
+| executable directoryへのpermission failure | symlink解決後の`tnnl`親directoryに書き込み権限がない | `ls -l "$(command -v tnnl)"`でsymlinkを確認し、`tnnl update`のerrorに表示された解決済みpathを`PATH_FROM_ERROR`へ置き換えて`ls -ld "$(dirname "PATH_FROM_ERROR")"`を実行する。必要ならuser-ownedな`PATH`へ再配置する |
