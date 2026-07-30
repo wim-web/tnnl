@@ -72,7 +72,7 @@ description: このリポジトリの Renovate PR を調査し、repo固有ル�
   - AWS SDK、Charmbracelet 系、Cobra など runtime dependency でも、API breaking、設定変更、runtime要件変更、deprecated API の利用がなく、`Test / test` が成功しているなら許可する。
   - `module` path、`go` directive、toolchain 指定を変える PR はこのパターンでは許可しない。
 - `aqua.yaml` だけを変更する patch/minor update
-  - `aquaproj/aqua-registry`、`aquaproj/aqua`、`spf13/cobra-cli`、`golang/go`、`hashicorp/terraform` の更新は、upstream notes を確認して低影響と判断できるなら許可する。
+  - package 名の固定リストでは判断しない。PR body、upstream notes、repo 内の使用箇所を確認し、この repo の build / runtime / release / local tool 実行への影響が低いと具体的に説明できるなら許可する。
   - `golang/go` は patch update を許可する。race detector や cross compile 関連ファイルに差分があっても、release notes に既存コード、module resolution、GoReleaser build、対応 platform への明示的な breaking change、migration、known regression がない場合はマージしてよい。minor update は release notes を確認し、GoReleaser build や runtime 要件への影響が低いと説明できる場合だけ許可する。
   - `hashicorp/terraform` は CLI pin の patch/minor update だけ許可する。Terraform code、provider lock、state、provider behavior に影響する変更を伴う場合はマージしない。
 - `.github/workflows/test.yml` または `.github/workflows/release.yml` だけを変更する GitHub Actions / CI / release tool の patch/minor update
