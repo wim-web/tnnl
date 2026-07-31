@@ -25,8 +25,8 @@ description: このリポジトリの Renovate PR を調査し、repo固有ル�
   - aqua: `aqua.yaml`
   - Terraform provider lock: `terraform/.terraform.lock.hcl`
 - CI:
-  - PR では `.github/workflows/test.yml` の workflow `Test` が `go mod download` と `go test -v -race ./...` を実行する。
-  - branch protection は観測時点で未設定。ただし、この skill では `Test / test` を必須 check として扱う。
+  - PR では `.github/workflows/test.yml` が Go、GitHub Actions / release 設定、ドキュメント / release script を検証する。
+  - branch protection は観測時点で未設定。この skill では check 名を固定せず、後述の `CI green` を必須条件として扱う。
 - Release:
   - `.github/workflows/release.yml` は tag push で GoReleaser を実行する。
   - release workflow は `v[0-9]+.[0-9]+.[0-9]+` に一致する tag push で起動する。
@@ -60,7 +60,7 @@ description: このリポジトリの Renovate PR を調査し、repo固有ル�
 - merge state が `CLEAN`
 - human review が未承認でもよいが、`CHANGES_REQUESTED`、requested changes、未解決の人間 review comment、未解決の人間 comment がない
 - 過去の `Renovate automerge review` コメントは、現在の repo-local skill と最新調査で未マージ理由が解消済みなら、未解決の人間 comment として扱わない
-- 必須 check `Test / test` が `SUCCESS`
+- `CI green` の条件を満たす
 - Renovate PR body と upstream changelog / release notes / migration guide を確認し、breaking changes、deprecated API、設定変更、peer dependency変更、runtime要件変更がない
 - changed files、依存の用途、release notes、CI結果から、この repo への影響範囲が小さいと具体的に説明できる
 - changed files が、以下の許可パターンのいずれかだけに収まる
@@ -69,7 +69,7 @@ description: このリポジトリの Renovate PR を調査し、repo固有ル�
 
 - `go.mod` と `go.sum` だけを変更する Go module の patch/minor update
   - direct / indirect dependency のどちらも、PR body と upstream notes を確認して低影響と判断できるなら許可する。
-  - AWS SDK、Charmbracelet 系、Cobra など runtime dependency でも、API breaking、設定変更、runtime要件変更、deprecated API の利用がなく、`Test / test` が成功しているなら許可する。
+  - AWS SDK、Charmbracelet 系、Cobra など runtime dependency でも、API breaking、設定変更、runtime要件変更、deprecated API の利用がなく、`CI green` なら許可する。
   - `module` path、`go` directive、toolchain 指定を変える PR はこのパターンでは許可しない。
 - `aqua.yaml` だけを変更する patch/minor update
   - package 名の固定リストでは判断しない。PR body、upstream notes、repo 内の使用箇所を確認し、この repo の build / runtime / release / local tool 実行への影響が低いと具体的に説明できるなら許可する。
@@ -93,7 +93,7 @@ description: このリポジトリの Renovate PR を調査し、repo固有ル�
 - draft PR
 - base branch が `main` ではない
 - merge conflict がある、または merge state が `CLEAN` ではない
-- 必須 check `Test / test` が failed / pending / missing
+- `CI green` の条件を満たさない
 - requested changes、未解決の人間 review comment、未解決の人間 comment がある
 - major update
 - `go.mod` の `module` path、`go` directive、toolchain 指定を変更する PR
@@ -111,17 +111,20 @@ description: このリポジトリの Renovate PR を調査し、repo固有ル�
 
 - 最終報告だけで済ませてはいけない。対象 PR に GitHub comment で未マージ理由を残す。
 - コメントには、確認した upstream release notes / changelog / migration guide のどの内容がこの skill の禁止条件に該当したかを具体的に書く。
-- `Test / test` が成功していてもマージしない場合は、check 成功だけでは許可条件を満たさない理由を書く。
+- `CI green` でもマージしない場合は、check 成功だけでは許可条件を満たさない理由を書く。
 - comment 投稿に失敗した場合は、マージせず、投稿に失敗したことと理由を最終報告に含める。
 
-## 必須 check
+## CI green
 
-- `Test / test`
-  - GitHub 上の workflow name は `Test`
-  - check run name は `test`
-  - conclusion は `SUCCESS` でなければならない
+check、workflow、job の表示名は固定しない。workflow や job の分割・名称変更だけで、この skill の更新を必要としないようにする。
 
-branch protection は観測時点で未設定だが、この skill では `Test / test` を必須 check として扱う。check が存在しない、pending、cancelled、skipped、failure の場合はマージしない。
+1. `gh pr checks <PR番号> --json name,bucket,state,workflow,link` と PR の `statusCheckRollup` を取得する。
+2. branch protection の required checks を取得できる場合は、その全てが存在して `SUCCESS` であることを確認する。
+3. PR に紐づく check が 1 件以上存在し、required 以外も含む全 check run / status context が `SUCCESS` の場合だけ `CI green` と判定する。
+4. check が 0 件、required check が欠落、または `PENDING`、`QUEUED`、`IN_PROGRESS`、`FAILURE`、`ERROR`、`CANCELLED`、`TIMED_OUT`、`ACTION_REQUIRED`、`SKIPPED`、`NEUTRAL`、`STALE`、`STARTUP_FAILURE` のいずれかが 1 件でもあればマージしない。
+5. check 名、workflow 名、job 名が前回実行時と異なることだけを blocker にしてはいけない。
+
+現在の `.github/workflows/test.yml` は `Go`、`Actions`、`Docs and release scripts` の複数 job を実行するが、これらの名前は判定条件ではない。
 
 ## マージ方法
 
@@ -164,7 +167,7 @@ release tag が不要な変更だけをマージした場合:
 - 全ての対象 Renovate PR を確認し、マージする PR とマージしない PR を判断し終えてから release に進む。
 - マージ可能な PR を全て `squash` merge し終える。
 - release tag 作成前に、open な Renovate PR を必ず再取得し、以下を確認する。
-  - `mergeStateStatus: CLEAN` かつ `Test / test: SUCCESS` かつ他の許可条件を満たす PR が残っていない。
+  - `mergeStateStatus: CLEAN` かつ `CI green` かつ他の許可条件を満たす PR が残っていない。
   - `mergeStateStatus: UNKNOWN` の PR は再取得して状態確定を待つ。待っても確定しない場合は、確認不能として未マージ理由に記録する。
   - 直前のマージで `main` が更新された後に、以前 `DIRTY` / `UNKNOWN` だった PR が `CLEAN` になっていない。
 - マージ可能な PR が 1 件でも残っている場合は release tag を作らず、マージ手順に戻る。
