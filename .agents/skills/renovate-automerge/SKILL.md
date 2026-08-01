@@ -25,7 +25,7 @@ description: このリポジトリの Renovate PR を調査し、repo固有ル�
   - aqua: `aqua.yaml`
   - Terraform provider lock: `terraform/.terraform.lock.hcl`
 - CI:
-  - PR では `.github/workflows/test.yml` が Go、GitHub Actions / release 設定、ドキュメント / release script を検証する。
+  - PR では `.github/workflows/test.yml` が Go、GitHub Actions / release 設定、release script を検証する複数 job を実行する。
   - branch protection は観測時点で未設定。この skill では check 名を固定せず、後述の `CI green` を必須条件として扱う。
 - Release:
   - `.github/workflows/release.yml` は tag push で GoReleaser を実行する。
@@ -124,7 +124,7 @@ check、workflow、job の表示名は固定しない。workflow や job の分�
 4. check が 0 件、required check が欠落、または `PENDING`、`QUEUED`、`IN_PROGRESS`、`FAILURE`、`ERROR`、`CANCELLED`、`TIMED_OUT`、`ACTION_REQUIRED`、`SKIPPED`、`NEUTRAL`、`STALE`、`STARTUP_FAILURE` のいずれかが 1 件でもあればマージしない。
 5. check 名、workflow 名、job 名が前回実行時と異なることだけを blocker にしてはいけない。
 
-現在の `.github/workflows/test.yml` は `Go`、`Actions`、`Docs and release scripts` の複数 job を実行するが、これらの名前は判定条件ではない。
+現在の `.github/workflows/test.yml` は複数 job を実行するが、それらの名前は判定条件ではない。
 
 ## マージ方法
 
