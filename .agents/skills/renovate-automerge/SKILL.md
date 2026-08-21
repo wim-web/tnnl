@@ -60,8 +60,9 @@ description: このリポジトリの Renovate PR を調査し、repo固有ル�
 - merge state が `CLEAN`
 - human review が未承認でもよいが、`CHANGES_REQUESTED`、requested changes、未解決の人間 review comment、未解決の人間 comment がない
 - 過去の `Renovate automerge review` コメントは、現在の repo-local skill と最新調査で未マージ理由が解消済みなら、未解決の人間 comment として扱わない
+- 過去の automation 調査結果を記録した人間 comment も、現在の repo-local skill と最新調査で blocker が解消し、requested changes や具体的な未解決対応要求を含まない場合は、未解決の人間 comment として扱わない。現行の `CHANGES_REQUESTED`、具体的な修正要求、未解決の対応依頼は blocker とする。
 - `CI green` の条件を満たす
-- Renovate PR body と upstream changelog / release notes / migration guide を確認し、breaking changes、deprecated API、設定変更、peer dependency変更、runtime要件変更がない
+- Renovate PR body と upstream changelog / release notes / migration guide を確認し、repo の source/build/runtime/deploy support に影響する breaking changes、deprecated API・設定、peer dependency変更、runtime・OS要件変更がない。upstream notes に一般的な toolchain/runtime/OS 変更がある場合は、許可パターン固有の条件で repo への影響を評価する。
 - changed files、依存の用途、release notes、CI結果から、この repo への影響範囲が小さいと具体的に説明できる
 - changed files が、以下の許可パターンのいずれかだけに収まる
 
@@ -73,7 +74,12 @@ description: このリポジトリの Renovate PR を調査し、repo固有ル�
   - `module` path、`go` directive、toolchain 指定を変える PR はこのパターンでは許可しない。
 - `aqua.yaml` だけを変更する patch/minor update
   - package 名の固定リストでは判断しない。PR body、upstream notes、repo 内の使用箇所を確認し、この repo の build / runtime / release / local tool 実行への影響が低いと具体的に説明できるなら許可する。
-  - `golang/go` は patch update を許可する。race detector や cross compile 関連ファイルに差分があっても、release notes に既存コード、module resolution、GoReleaser build、対応 platform への明示的な breaking change、migration、known regression がない場合はマージしてよい。minor update は release notes を確認し、GoReleaser build や runtime 要件への影響が低いと説明できる場合だけ許可する。
+  - `golang/go` の patch update は許可する。race detector や cross compile 関連ファイルに差分があっても、release notes に既存コード、module resolution、GoReleaser build、対応 platform への明示的な breaking change、migration、known regression がない場合はマージしてよい。
+  - `golang/go` の minor update は、以下を全て満たす場合だけ許可する。
+    - 変更が `aqua.yaml` の Go version pin/config など対象と役割が明確なものだけで、`go.mod` の `go` directive / `toolchain`、source/test、migration、`.goreleaser.yml`、workflow、runtime config、OS/arch target、infra/deploy/database 設定を変更しない。
+    - upstream 公式 release notes / migration guide を読み、breaking change、deprecated API/設定、削除された runtime setting、runtime/OS 要件を特定し、repo 内の利用箇所、対応 platform、GoReleaser build への影響を確認する。公式 notes に一般的な toolchain/runtime/OS 変更があるだけでは直ちに禁止しないが、repo が明示する support contract を壊さず、source/migration/runtime config の変更が不要で、影響を具体的に説明できる場合だけ許可する。
+    - repo 内に deprecated API / removed setting / 影響を受ける runtime config の利用がなく、GoReleaser の対象 OS/arch と配布条件が PR によって危険に変わらないことを確認する。判断不能、既存 support contract 違反、migration または運用変更が必要な場合は禁止する。
+    - `CI green`、`CLEAN`、requested changes なし、未解決の人間 review/comment blocker なしを確認する。
   - `hashicorp/terraform` は CLI pin の patch/minor update だけ許可する。Terraform code、provider lock、state、provider behavior に影響する変更を伴う場合はマージしない。
 - `.github/workflows/test.yml` または `.github/workflows/release.yml` だけを変更する GitHub Actions / CI / release tool の patch/minor update
   - action は commit SHA pin のままで、Renovate が付ける version comment も新しい version と対応していること。
@@ -104,7 +110,7 @@ description: このリポジトリの Renovate PR を調査し、repo固有ル�
 - Docker image / Dockerfile / docker-compose に関係する PR
 - database / migration / RDS に関係する PR
 - changelog / release notes / migration guide を確認できず、影響範囲を判断できない PR
-- breaking changes / deprecated API / peer dependency変更 / runtime要件変更 / 設定変更の可能性が残る PR
+- repo の source/build/runtime/deploy support に影響する breaking changes / deprecated API・設定 / peer dependency変更 / runtime・OS要件変更 / 設定変更がある、またはその影響を確認できない PR
 - この skill の「マージしてよいもの」に明記されていない PR
 
 マージしない Renovate PR がある場合:
