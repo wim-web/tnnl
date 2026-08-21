@@ -78,7 +78,7 @@ description: このリポジトリの Renovate PR を調査し、repo固有ル�
   - `golang/go` の minor update は、以下を全て満たす場合だけ許可する。
     - 変更が `aqua.yaml` の Go version pin/config など対象と役割が明確なものだけで、`go.mod` の `go` directive / `toolchain`、source/test、migration、`.goreleaser.yml`、workflow、runtime config、OS/arch target、infra/deploy/database 設定を変更しない。
     - upstream 公式 release notes / migration guide を読み、breaking change、deprecated API/設定、削除された runtime setting、runtime/OS 要件を特定し、repo 内の利用箇所、対応 platform、GoReleaser build への影響を確認する。公式 notes に一般的な toolchain/runtime/OS 変更があるだけでは直ちに禁止しないが、repo が明示する support contract を壊さず、source/migration/runtime config の変更が不要で、影響を具体的に説明できる場合だけ許可する。
-    - repo 内に deprecated API / removed setting / 影響を受ける runtime config の利用がなく、GoReleaser の対象 OS/arch と配布条件が PR によって危険に変わらないことを確認する。判断不能、既存 support contract 違反、migration または運用変更が必要な場合は禁止する。
+    - repo 内に deprecated API / removed setting / 影響を受ける runtime config や behavior-sensitive API usage（error text / wire format など）の利用がないか、公式 notes が互換性維持を明記し、repo の利用方法と checks で問題がないことを確認する。GoReleaser の対象 OS/arch と配布条件が PR によって危険に変わらないことも確認する。判断不能、既存 support contract 違反、migration または運用変更が必要な場合は禁止する。
     - `CI green`、`CLEAN`、requested changes なし、未解決の人間 review/comment blocker なしを確認する。
   - `hashicorp/terraform` は CLI pin の patch/minor update だけ許可する。Terraform code、provider lock、state、provider behavior に影響する変更を伴う場合はマージしない。
 - `.github/workflows/test.yml` または `.github/workflows/release.yml` だけを変更する GitHub Actions / CI / release tool の patch/minor update
