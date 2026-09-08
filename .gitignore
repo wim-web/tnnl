@@ -4,3 +4,5 @@ dist
 
 # input file
 *-input.json
+
+renstiq.yaml
