@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.30](https://github.com/wim-web/tnnl/compare/v0.6.29...v0.6.30) (2026-09-18)
+
+
+### Bug Fixes
+
+* **deps:** update aws-sdk-go-v2 monorepo ([#171](https://github.com/wim-web/tnnl/issues/171)) ([f2e280e](https://github.com/wim-web/tnnl/commit/f2e280e5e7adf2ef01e19ea531c444e2609e4bfd))
+
 ## [0.6.29](https://github.com/wim-web/tnnl/compare/v0.6.28...v0.6.29) (2026-09-11)
 
 
