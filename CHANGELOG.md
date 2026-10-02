@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.31](https://github.com/wim-web/tnnl/compare/v0.6.30...v0.6.31) (2026-10-02)
+
+
+### Bug Fixes
+
+* **deps:** update aws-sdk-go-v2 monorepo ([#178](https://github.com/wim-web/tnnl/issues/178)) ([2e6c202](https://github.com/wim-web/tnnl/commit/2e6c202893e45688203d64a7175e54c436cff873))
+* **deps:** update module charm.land/bubbletea/v2 to v2.0.10 ([#179](https://github.com/wim-web/tnnl/issues/179)) ([3755ecc](https://github.com/wim-web/tnnl/commit/3755eccd3cb318718ef5089a7b61e503aae1a3e0))
+
 ## [0.6.30](https://github.com/wim-web/tnnl/compare/v0.6.29...v0.6.30) (2026-09-18)
 
 
