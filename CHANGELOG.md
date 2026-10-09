@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.32](https://github.com/wim-web/tnnl/compare/v0.6.31...v0.6.32) (2026-10-09)
+
+
+### Bug Fixes
+
+* **deps:** update aws-sdk-go-v2 monorepo ([#182](https://github.com/wim-web/tnnl/issues/182)) ([99f85ea](https://github.com/wim-web/tnnl/commit/99f85ea4c763b786a04d2067ce5a9b2f25451b65))
+* **deps:** update dependency golang/go to v1.27.2 ([#186](https://github.com/wim-web/tnnl/issues/186)) ([a1b5eac](https://github.com/wim-web/tnnl/commit/a1b5eacf8de4b67bf192aab539cfe2bfebd87dd4))
+
 ## [0.6.31](https://github.com/wim-web/tnnl/compare/v0.6.30...v0.6.31) (2026-10-02)
 
 
