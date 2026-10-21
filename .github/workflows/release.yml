@@ -39,6 +39,7 @@ jobs:
       contents: write
     env:
       RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+      GOTOOLCHAIN: local
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -59,7 +60,7 @@ jobs:
         env:
           GORELEASER_CURRENT_TAG: ${{ env.RELEASE_TAG }}
 
-      - name: Verify checksums and version
+      - name: Verify checksums, Go toolchains, and version
         run: >-
           bash script/verify-release-artifacts.sh
           "$RELEASE_TAG" dist tnnl_linux_amd64.tar.gz

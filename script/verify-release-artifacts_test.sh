@@ -31,6 +31,24 @@ cat >"$tool_dir/tar" <<'EOF'
 exec "$VERIFY_RELEASE_TEST_HOST_TAR" "$@"
 EOF
 chmod 0755 "$tool_dir/tar"
+
+# Model go version -m without compiling a fixture for every historical toolchain.
+cat >"$tool_dir/go" <<'EOF'
+#!/bin/sh
+if [ "$#" -ne 3 ] || [ "$1" != version ] || [ "$2" != -m ]; then
+  exit 64
+fi
+while IFS= read -r line; do
+  case "$line" in
+    '# test-go-version: '*)
+      printf '%s: %s\n' "$3" "${line#\# test-go-version: }"
+      exit 0
+      ;;
+  esac
+done <"$3"
+printf '%s: not a Go executable\n' "$3"
+EOF
+chmod 0755 "$tool_dir/go"
 export PATH="$tool_dir:$PATH"
 
 fail() {
@@ -40,9 +58,11 @@ fail() {
 
 write_binary() {
   local version="$1"
+  local go_version="${2:-go1.27.3}"
 
   {
     printf '%s\n' '#!/bin/sh'
+    printf '# test-go-version: %s\n' "$go_version"
     printf '%s\n' 'if [ "${1:-}" != "version" ]; then exit 64; fi'
     printf "printf '%%s\\n' '%s'\n" "$version"
   } >"$source_dir/tnnl"
@@ -55,9 +75,9 @@ package_asset() {
 
 write_checksums() {
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$dist" && sha256sum "$asset" "$sidecar" >checksums.txt)
+    (cd "$dist" && sha256sum "$asset" "$sidecar" "$@" >checksums.txt)
   elif command -v shasum >/dev/null 2>&1; then
-    (cd "$dist" && shasum -a 256 "$asset" "$sidecar" >checksums.txt)
+    (cd "$dist" && shasum -a 256 "$asset" "$sidecar" "$@" >checksums.txt)
   else
     fail "sha256sum or shasum is required to build the test fixture"
   fi
@@ -119,6 +139,31 @@ printf '%s\n' "release notes" >"$dist/$sidecar"
 write_checksums
 
 expect_success "valid release" "v1.2.3" "$dist" "$asset"
+
+for go_version in go1.26.10 go1.26.11 go1.27.3 go1.27.4 go1.28.0; do
+  write_binary "1.2.3" "$go_version"
+  package_asset
+  write_checksums
+  expect_success "patched toolchain $go_version" "v1.2.3" "$dist" "$asset"
+done
+
+for go_version in go1.25.14 go1.26.9 go1.27.2 go1.28rc1 devel unknown; do
+  write_binary "1.2.3" "$go_version"
+  package_asset
+  write_checksums
+  expect_failure "unpatched or unknown toolchain $go_version" "unpatched or unrecognized Go toolchain" "v1.2.3" "$dist" "$asset"
+done
+
+# A valid host archive must not hide an unpatched binary for another platform.
+foreign_asset="tnnl_darwin_arm64.tar.gz"
+write_binary "1.2.3" "go1.27.2"
+"$host_tar" -czf "$dist/$foreign_asset" -C "$source_dir" tnnl
+write_binary "1.2.3"
+package_asset
+write_checksums "$foreign_asset"
+expect_failure "unpatched foreign archive" "unpatched or unrecognized Go toolchain in $foreign_asset: go1.27.2" "v1.2.3" "$dist" "$asset"
+rm -f "$dist/$foreign_asset"
+write_checksums
 
 unlisted_asset="tnnl_unlisted.tar.gz"
 cp "$dist/$asset" "$dist/$unlisted_asset"

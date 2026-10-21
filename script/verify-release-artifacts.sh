@@ -82,14 +82,46 @@ fi
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-tar -xzf "$dist/$asset" -C "$tmp"
-if [[ ! -x "$tmp/tnnl" ]]; then
-  echo "release archive does not contain an executable tnnl" >&2
-  exit 1
-fi
+# Inspect every archive that the release workflow uploads, including foreign
+# architectures. The host Go version alone cannot prove how a binary was built.
+archives=("$dist/$asset")
+for publishable_path in "$dist"/tnnl_*.tar.gz; do
+  [[ -e "$publishable_path" ]] || continue
+  [[ "$publishable_path" == "$dist/$asset" ]] || archives+=("$publishable_path")
+done
+
+for archive in "${archives[@]}"; do
+  archive_name="${archive##*/}"
+  extracted="$tmp/${archive_name%.tar.gz}"
+  mkdir -p "$extracted"
+  tar -xzf "$archive" -C "$extracted"
+  if [[ ! -x "$extracted/tnnl" ]]; then
+    echo "release archive does not contain an executable tnnl: $archive_name" >&2
+    exit 1
+  fi
+
+  build_info="$(go version -m "$extracted/tnnl")"
+  build_go_version="${build_info%%$'\n'*}"
+  build_go_version="${build_go_version##* }"
+  patched=0
+  if [[ "$build_go_version" =~ ^go([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    major="${BASH_REMATCH[1]}"
+    minor="${BASH_REMATCH[2]}"
+    patch="${BASH_REMATCH[3]}"
+    if ((major > 1 || (major == 1 && (minor > 27 ||
+      (minor == 27 && patch >= 3) || (minor == 26 && patch >= 10))))); then
+      patched=1
+    fi
+  fi
+  if ((patched == 0)); then
+    echo "unpatched or unrecognized Go toolchain in $archive_name: $build_go_version (need Go 1.26.10+, 1.27.3+, or a newer stable series)" >&2
+    exit 1
+  fi
+  echo "$archive_name: $build_go_version"
+done
 
 expected="${tag#v}"
-actual="$("$tmp/tnnl" version)"
+actual="$("$tmp/${asset%.tar.gz}/tnnl" version)"
 if [[ "$actual" != "$expected" ]]; then
   echo "release version mismatch: got $actual, want $expected" >&2
   exit 1
