@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.34](https://github.com/wim-web/tnnl/compare/v0.6.33...v0.6.34) (2026-10-21)
+
+
+### Bug Fixes
+
+* **deps:** update dependency golang/go to v1.27.3 ([#193](https://github.com/wim-web/tnnl/issues/193)) ([d020eda](https://github.com/wim-web/tnnl/commit/d020eda65358a8c23ac8137bee15d6ffce760746))
+
 ## [0.6.33](https://github.com/wim-web/tnnl/compare/v0.6.32...v0.6.33) (2026-10-16)
 
 
