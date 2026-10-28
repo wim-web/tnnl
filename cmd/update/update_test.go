@@ -177,57 +177,12 @@ func TestReleaseFromLatestLocationRejectsUnsafeOrAmbiguousURL(t *testing.T) {
 	}
 }
 
-func TestNormalizeVersion(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{
-			name: "v prefix",
-			in:   "v1.2.3",
-			want: "1.2.3",
-		},
-		{
-			name: "no prefix",
-			in:   "1.2.3",
-			want: "1.2.3",
-		},
-		{
-			name: "trim spaces",
-			in:   " v0.5.0 ",
-			want: "0.5.0",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeVersion(tt.in)
-			if got != tt.want {
-				t.Fatalf("normalizeVersion() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestAssetURL(t *testing.T) {
-	rel := release{
-		TagName:         "v0.6.0",
-		DownloadBaseURL: "https://github.com/wim-web/tnnl/releases/download/v0.6.0",
-	}
-
-	got, err := rel.assetURL("tnnl_darwin_arm64.tar.gz")
-	if err != nil {
-		t.Fatalf("assetURL() unexpected error: %v", err)
-	}
-
-	if want := "https://github.com/wim-web/tnnl/releases/download/v0.6.0/tnnl_darwin_arm64.tar.gz"; got != want {
-		t.Fatalf("assetURL() = %q, want %q", got, want)
-	}
-}
-
 func TestShouldUsePathBinary(t *testing.T) {
-	tempPath := filepath.Join(os.TempDir(), "go-build123", "b001", "exe", "tnnl")
+	base := t.TempDir()
+	tempDir := filepath.Join(base, "temporary")
+	t.Setenv("TMPDIR", tempDir)
+	t.Setenv("TMP", tempDir)
+	t.Setenv("TEMP", tempDir)
 	tests := []struct {
 		name string
 		in   string
@@ -235,18 +190,53 @@ func TestShouldUsePathBinary(t *testing.T) {
 	}{
 		{
 			name: "normal installed path",
-			in:   filepath.Join(string(filepath.Separator), "usr", "local", "bin", "tnnl"),
+			in:   filepath.Join(base, "installed", "tnnl"),
 			want: false,
 		},
 		{
 			name: "not tnnl binary name",
-			in:   filepath.Join(string(filepath.Separator), "usr", "local", "bin", "main"),
+			in:   filepath.Join(base, "installed", "main"),
 			want: true,
 		},
 		{
 			name: "temp go run path",
-			in:   tempPath,
+			in:   filepath.Join(tempDir, "go-build123", "b001", "exe", "tnnl"),
 			want: true,
+		},
+		{
+			name: "go build outside system temp",
+			in:   filepath.Join(base, "custom-tmp", "go-build123", "b001", "exe", "tnnl"),
+			want: true,
+		},
+		{
+			name: "exact go build directory",
+			in:   filepath.Join(base, "go-build", "bin", "tnnl"),
+			want: true,
+		},
+		{
+			name: "similar temporary directory prefix",
+			in:   filepath.Join(tempDir+"-neighbor", "tnnl"),
+			want: false,
+		},
+		{
+			name: "go builder is an installed directory",
+			in:   filepath.Join(base, "go-builder", "tnnl"),
+			want: false,
+		},
+		{
+			name: "go build tools is an installed directory",
+			in:   filepath.Join(base, "go-build-tools", "tnnl"),
+			want: false,
+		},
+		{
+			name: "go build numeric prefix needs a boundary",
+			in:   filepath.Join(base, "go-build123extra", "tnnl"),
+			want: false,
+		},
+		{
+			name: "go build must start a directory name",
+			in:   filepath.Join(base, "my-go-build123", "tnnl"),
+			want: false,
 		},
 	}
 

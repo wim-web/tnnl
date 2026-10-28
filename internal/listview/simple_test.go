@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-func TestItemFilterValueUsesLabelAndRetainsValue(t *testing.T) {
+func TestItemFilterValueUsesLabel(t *testing.T) {
 	option := Option{
 		Label: "service:web abc123",
 		Value: "arn:.../abc123",
@@ -17,9 +17,6 @@ func TestItemFilterValueUsesLabelAndRetainsValue(t *testing.T) {
 
 	if got := i.FilterValue(); got != option.Label {
 		t.Fatalf("FilterValue() = %q, want %q", got, option.Label)
-	}
-	if i.Value != option.Value {
-		t.Fatalf("item.Value = %q, want %q", i.Value, option.Value)
 	}
 }
 

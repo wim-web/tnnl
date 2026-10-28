@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/wim-web/tnnl/internal/input"
@@ -126,10 +127,12 @@ func TestRemotePortforwardCommandAllExplicitFlagsOverrideFile(t *testing.T) {
 func TestRemotePortforwardCommandPassesExecuteContextToRunner(t *testing.T) {
 	type contextKey struct{}
 	want := "remote portforward context value"
-	ctx := context.WithValue(context.Background(), contextKey{}, want)
-	var got any
+	deadline := time.Now().Add(time.Hour)
+	ctx, cancel := context.WithDeadline(context.WithValue(context.Background(), contextKey{}, want), deadline)
+	t.Cleanup(cancel)
+	var got context.Context
 	command := newRemotePortforwardCommand(func(ctx context.Context, _ input.RemotePortForwardInput) error {
-		got = ctx.Value(contextKey{})
+		got = ctx
 		return nil
 	})
 	command.SetArgs([]string{"--remote-port", "22", "--host", "example.com"})
@@ -137,8 +140,18 @@ func TestRemotePortforwardCommandPassesExecuteContextToRunner(t *testing.T) {
 	if err := command.ExecuteContext(ctx); err != nil {
 		t.Fatalf("ExecuteContext() error = %v", err)
 	}
-	if got != want {
-		t.Fatalf("runner context value = %#v, want %#v", got, want)
+	if got == nil {
+		t.Fatal("runner did not receive a context")
+	}
+	if value := got.Value(contextKey{}); value != want {
+		t.Fatalf("runner context value = %#v, want %#v", value, want)
+	}
+	if gotDeadline, ok := got.Deadline(); !ok || !gotDeadline.Equal(deadline) {
+		t.Fatalf("runner deadline = %v, %t, want %v, true", gotDeadline, ok, deadline)
+	}
+	cancel()
+	if err := got.Err(); err != context.Canceled {
+		t.Fatalf("runner context error after caller cancellation = %v, want context.Canceled", err)
 	}
 }
 
@@ -178,7 +191,7 @@ func TestRemotePortforwardCommandInvalidRequiredValueDoesNotInvokeRunner(t *test
 	}
 }
 
-func TestRemotePortforwardCommandInputFileHelpNamesParent(t *testing.T) {
+func TestRemotePortforwardHelpDocumentsRemoteHostAndAutomaticLocalPort(t *testing.T) {
 	command := newRemotePortforwardCommand(func(context.Context, input.RemotePortForwardInput) error { return nil })
 	flag := command.Flags().Lookup(inputFileName)
 	if flag == nil {
@@ -187,13 +200,8 @@ func TestRemotePortforwardCommandInputFileHelpNamesParent(t *testing.T) {
 	if !strings.Contains(flag.Usage, "tnnl remoteportforward make-input-file") {
 		t.Fatalf("input-file usage = %q, want parent-specific generator", flag.Usage)
 	}
-}
-
-func TestRemotePortforwardHelpDocumentsRemoteHostAndAutomaticLocalPort(t *testing.T) {
-	command := newRemotePortforwardCommand(func(context.Context, input.RemotePortForwardInput) error { return nil })
 
 	assertHelpContains(t, command,
-		"tnnl remoteportforward make-input-file",
 		"remote host",
 		"automatic local-port selection",
 		"omitted or the zero value",

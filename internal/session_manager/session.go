@@ -13,6 +13,8 @@ import (
 
 const CommandName = "session-manager-plugin"
 
+const preflightWaitDelay = 200 * time.Millisecond
+
 type SessionResponse struct {
 	SessionID  string `json:"SessionId"`
 	StreamURL  string `json:"StreamUrl"`
@@ -85,7 +87,10 @@ func Preflight(ctx context.Context) (Plugin, error) {
 	return preflight(ctx, dependencies{
 		lookPath: exec.LookPath,
 		commandContext: func(ctx context.Context, name string, args ...string) command {
-			return exec.CommandContext(ctx, name, args...)
+			cmd := exec.CommandContext(ctx, name, args...)
+			// A descendant may retain the output pipes after the plugin exits.
+			cmd.WaitDelay = preflightWaitDelay
+			return cmd
 		},
 		preflightLimit: 3 * time.Second,
 	})

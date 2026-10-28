@@ -46,7 +46,11 @@ func TestReadInputFileStrict(t *testing.T) {
 
 func TestMakeInputFileRefusesExistingFileUnlessForced(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "exec-input.json")
-	original := []byte("keep me")
+	original := []byte(`{"command":"` + strings.Repeat("old-command", 32) + `"}`)
+	wantContent := "{\n  \"cluster\": \"\",\n  \"service\": \"\",\n  \"command\": \"bash\",\n  \"wait\": 0\n}\n"
+	if len(original) <= len(wantContent) {
+		t.Fatal("fixture must replace a longer file with shorter JSON")
+	}
 	writeFixture(t, path, original)
 
 	err := MakeInputFile(ExecInput{Cmd: "sh"}, path, false)
@@ -64,6 +68,13 @@ func TestMakeInputFileRefusesExistingFileUnlessForced(t *testing.T) {
 
 	if err := MakeInputFile(ExecInput{Cmd: "bash"}, path, true); err != nil {
 		t.Fatalf("MakeInputFile(force=true) error = %v", err)
+	}
+	got, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read forced input file: %v", err)
+	}
+	if string(got) != wantContent {
+		t.Fatalf("forced file = %q (%d bytes), want %q (%d bytes)", got, len(got), wantContent, len(wantContent))
 	}
 
 	var decoded ExecInput

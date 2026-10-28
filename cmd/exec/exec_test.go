@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/wim-web/tnnl/internal/input"
@@ -61,10 +62,12 @@ func TestExecCommandInvalidInputDoesNotInvokeRunner(t *testing.T) {
 func TestExecCommandPassesExecuteContextToRunner(t *testing.T) {
 	type contextKey struct{}
 	want := "context value"
-	ctx := context.WithValue(context.Background(), contextKey{}, want)
-	var got any
+	deadline := time.Now().Add(time.Hour)
+	ctx, cancel := context.WithDeadline(context.WithValue(context.Background(), contextKey{}, want), deadline)
+	t.Cleanup(cancel)
+	var got context.Context
 	command := newExecCommand(func(ctx context.Context, _ input.ExecInput) error {
-		got = ctx.Value(contextKey{})
+		got = ctx
 		return nil
 	})
 	command.SetArgs([]string{})
@@ -72,8 +75,18 @@ func TestExecCommandPassesExecuteContextToRunner(t *testing.T) {
 	if err := command.ExecuteContext(ctx); err != nil {
 		t.Fatalf("ExecuteContext() error = %v", err)
 	}
-	if got != want {
-		t.Fatalf("runner context value = %#v, want %#v", got, want)
+	if got == nil {
+		t.Fatal("runner did not receive a context")
+	}
+	if value := got.Value(contextKey{}); value != want {
+		t.Fatalf("runner context value = %#v, want %#v", value, want)
+	}
+	if gotDeadline, ok := got.Deadline(); !ok || !gotDeadline.Equal(deadline) {
+		t.Fatalf("runner deadline = %v, %t, want %v, true", gotDeadline, ok, deadline)
+	}
+	cancel()
+	if err := got.Err(); err != context.Canceled {
+		t.Fatalf("runner context error after caller cancellation = %v, want context.Canceled", err)
 	}
 }
 

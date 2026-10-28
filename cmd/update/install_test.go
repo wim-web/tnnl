@@ -272,6 +272,7 @@ func TestReplaceExecutableSuccess(t *testing.T) {
 func TestReplaceExecutableFailureCleansUpOnlyOwnTemp(t *testing.T) {
 	t.Run("candidate open", func(t *testing.T) {
 		fixture := newReplacementFailureFixture(t)
+		fixture.preservedFiles[fixture.currentPath] = snapshotReplacementFile(t, fixture.currentPath)
 		fixture.candidatePath = filepath.Join(fixture.dir, "missing-candidate")
 
 		assertReplacementFailure(t, fixture, "open candidate executable")
@@ -282,6 +283,7 @@ func TestReplaceExecutableFailureCleansUpOnlyOwnTemp(t *testing.T) {
 			t.Skip("directory read failure fixture requires Darwin or Linux")
 		}
 		fixture := newReplacementFailureFixture(t)
+		fixture.preservedFiles[fixture.currentPath] = snapshotReplacementFile(t, fixture.currentPath)
 		if err := os.Remove(fixture.candidatePath); err != nil {
 			t.Fatal(err)
 		}

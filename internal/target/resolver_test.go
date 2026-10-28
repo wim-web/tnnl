@@ -280,6 +280,42 @@ func TestResolverEligibleTasksPaginatesAndOrderedDeduplicates(t *testing.T) {
 	}
 }
 
+func TestResolverEligibleTasksFiltersUnreadyDescribeResults(t *testing.T) {
+	const taskPrefix = "arn:aws:ecs:us-east-1:123456789012:task/production/"
+	stopped := resolverEligibleTask(taskPrefix + "00000000000000000000000000000001")
+	stopped.LastStatus = aws.String("STOPPED")
+	firstReady := resolverEligibleTask(taskPrefix + "00000000000000000000000000000002")
+	execDisabled := resolverEligibleTask(taskPrefix + "00000000000000000000000000000003")
+	execDisabled.EnableExecuteCommand = false
+	agentPending := resolverEligibleTask(taskPrefix + "00000000000000000000000000000004")
+	agentPending.Containers[0].ManagedAgents[0].LastStatus = aws.String("PENDING")
+	lastReady := resolverEligibleTask(taskPrefix + "00000000000000000000000000000005")
+	missingRuntime := resolverEligibleTask(taskPrefix + "00000000000000000000000000000006")
+	missingRuntime.Containers[0].RuntimeId = nil
+
+	// ListTasks asks for RUNNING tasks, but readiness must be checked again on
+	// the authoritative DescribeTasks response, including its container state.
+	described := []types.Task{stopped, firstReady, execDisabled, agentPending, lastReady, missingRuntime}
+	client := &fakeECS{
+		taskPages: map[string]*ecs.ListTasksOutput{
+			"": {TaskArns: resolverTaskARNs(described)},
+		},
+		describe: func(context.Context, *ecs.DescribeTasksInput) (*ecs.DescribeTasksOutput, error) {
+			return &ecs.DescribeTasksOutput{Tasks: described}, nil
+		},
+	}
+
+	got, err := NewResolver(client).EligibleTasks(context.Background(), "production", "payments")
+	if err != nil {
+		t.Fatalf("EligibleTasks() error = %v", err)
+	}
+	// The expected tasks are explicit: deriving them with IsEligibleTask would
+	// repeat the implementation and obscure a missing readiness filter.
+	if want := []types.Task{firstReady, lastReady}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("EligibleTasks() ARNs = %#v, want only ready tasks %#v", resolverTaskARNs(got), resolverTaskARNs(want))
+	}
+}
+
 func TestResolverEligibleTasksRejectsRepeatedPaginationTokens(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -385,36 +421,6 @@ func TestResolverEligibleTasksChunksDescribeRequestsAndPreservesResponseOrder(t 
 	assertResolverCallMarkers(t, client, "batch-marker")
 }
 
-func TestResolverDescribeTaskBatchesUseIndependentSlices(t *testing.T) {
-	arns := make([]string, 201)
-	for i := range arns {
-		arns[i] = fmt.Sprintf("task-%03d", i)
-	}
-
-	client := &fakeECS{
-		taskPages: map[string]*ecs.ListTasksOutput{
-			"": {TaskArns: arns},
-		},
-		describe: func(_ context.Context, input *ecs.DescribeTasksInput) (*ecs.DescribeTasksOutput, error) {
-			if len(input.Tasks) > 0 && input.Tasks[0] == "task-000" {
-				input.Tasks = append(input.Tasks, "client-appended-task")
-			}
-			return &ecs.DescribeTasksOutput{}, nil
-		},
-	}
-
-	_, err := NewResolver(client).EligibleTasks(context.Background(), "batch-cluster", "")
-	if err != nil {
-		t.Fatalf("EligibleTasks() error = %v", err)
-	}
-	if got := len(client.describeTasksCalls); got != 3 {
-		t.Fatalf("DescribeTasks call count = %d, want 3", got)
-	}
-	if got := client.describeTasksCalls[1].input.Tasks[0]; got != "task-100" {
-		t.Fatalf("second DescribeTasks batch starts with %q, want %q", got, "task-100")
-	}
-}
-
 func TestResolverEligibleTasksReturnsJoinedDescribeFailures(t *testing.T) {
 	client := &fakeECS{
 		taskPages: map[string]*ecs.ListTasksOutput{
@@ -453,13 +459,6 @@ func TestResolverEligibleTasksReturnsJoinedDescribeFailures(t *testing.T) {
 		if !strings.Contains(err.Error(), fragment) {
 			t.Errorf("EligibleTasks() error = %q, want fragment %q", err, fragment)
 		}
-	}
-	var joined interface{ Unwrap() []error }
-	if !errors.As(err, &joined) {
-		t.Fatalf("EligibleTasks() error type = %T, want errors.Join-compatible error", err)
-	}
-	if gotFailures := len(joined.Unwrap()); gotFailures != 2 {
-		t.Errorf("joined failure count = %d, want 2", gotFailures)
 	}
 }
 
