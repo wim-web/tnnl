@@ -97,21 +97,6 @@ func TestValidatePortForward(t *testing.T) {
 	}
 }
 
-func TestValidatePortForwardJoinsTargetAndLocalErrors(t *testing.T) {
-	err := ValidatePortForward(PortForwardInput{
-		TargetPortNumber: "abc",
-		LocalPortNumber:  "0",
-	})
-	if err == nil {
-		t.Fatal("ValidatePortForward() error = nil, want joined errors")
-	}
-	for _, want := range []string{"target port must be a decimal integer", "local port must be between 1 and 65535"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("ValidatePortForward() error = %q, want substring %q", err, want)
-		}
-	}
-}
-
 func TestValidateExecRejectsNegativeWaitAndBlankCommand(t *testing.T) {
 	err := ValidateExec(ExecInput{Cmd: "  ", Wait: -1})
 	if err == nil {

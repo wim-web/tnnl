@@ -443,9 +443,23 @@ func shouldUsePathBinary(exePath string) bool {
 		return true
 	}
 
-	sep := string(filepath.Separator)
-	if strings.Contains(cleanPath, sep+"go-build") || strings.Contains(cleanPath, sep+"go-build"+sep) {
-		return true
+	for _, directory := range strings.Split(filepath.Dir(cleanPath), string(filepath.Separator)) {
+		suffix, ok := strings.CutPrefix(directory, "go-build")
+		if !ok {
+			continue
+		}
+		// Go's temporary work directory is go-build followed by decimal digits.
+		// Keep an exact go-build directory too, but not names like go-builder.
+		buildDirectory := true
+		for _, digit := range suffix {
+			if digit < '0' || digit > '9' {
+				buildDirectory = false
+				break
+			}
+		}
+		if buildDirectory {
+			return true
+		}
 	}
 
 	return false

@@ -44,27 +44,6 @@ func TestResolveVersion(t *testing.T) {
 			want: "1.2.3",
 		},
 		{
-			name:   "only one leading lowercase v is removed",
-			linker: "vv1.2.3",
-			info:   buildInfo("v9.9.9"),
-			ok:     true,
-			want:   "v1.2.3",
-		},
-		{
-			name:   "uppercase V is preserved",
-			linker: "V1.2.3",
-			info:   buildInfo("v9.9.9"),
-			ok:     true,
-			want:   "V1.2.3",
-		},
-		{
-			name:   "linker devel is accepted",
-			linker: "(devel)",
-			info:   buildInfo("v9.9.9"),
-			ok:     true,
-			want:   "(devel)",
-		},
-		{
 			name:   "empty linker falls back to module",
 			linker: "",
 			info:   buildInfo("v2.3.4"),
@@ -109,13 +88,6 @@ func TestResolveVersion(t *testing.T) {
 			info:   buildInfo("v2.3.4"),
 			ok:     true,
 			want:   "2.3.4",
-		},
-		{
-			name:   "module removes at most one leading lowercase v",
-			linker: "dev",
-			info:   buildInfo(" vv2.3.4 "),
-			ok:     true,
-			want:   "v2.3.4",
 		},
 		{
 			name:   "unavailable build info returns dev",

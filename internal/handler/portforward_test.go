@@ -13,7 +13,6 @@ import (
 	"github.com/wim-web/tnnl/internal/input"
 	"github.com/wim-web/tnnl/internal/listview"
 	"github.com/wim-web/tnnl/internal/session_manager"
-	"github.com/wim-web/tnnl/pkg/command"
 )
 
 func TestPortForwardHandlerPreflightFailureStopsBeforeAWS(t *testing.T) {
@@ -81,8 +80,8 @@ func TestPortForwardHandlerSelectsSecondReplicaAndAllocatesLocalPort(t *testing.
 	if got := aws.ToString(ssmClient.startInput.Target); got != wantTarget {
 		t.Fatalf("StartSession target = %q, want second replica %q", got, wantTarget)
 	}
-	if got := aws.ToString(ssmClient.startInput.DocumentName); got != string(command.PORT_FORWARD_DOCUMENT_NAME) {
-		t.Fatalf("StartSession document = %q", got)
+	if got, want := aws.ToString(ssmClient.startInput.DocumentName), "AWS-StartPortForwardingSession"; got != want {
+		t.Fatalf("StartSession document = %q, want %q", got, want)
 	}
 	wantParams := map[string][]string{
 		"portNumber":      {"5432"},
@@ -176,8 +175,8 @@ func TestRemotePortForwardHandlerBuildsExactParameters(t *testing.T) {
 	if err := remotePortForwardHandler(context.Background(), in, deps); err != nil {
 		t.Fatalf("remotePortForwardHandler() error = %v", err)
 	}
-	if got := aws.ToString(ssmClient.startInput.DocumentName); got != string(command.REMOTE_PORT_FORWARD_DOCUMENT_NAME) {
-		t.Fatalf("document = %q", got)
+	if got, want := aws.ToString(ssmClient.startInput.DocumentName), "AWS-StartPortForwardingSessionToRemoteHost"; got != want {
+		t.Fatalf("document = %q, want %q", got, want)
 	}
 	want := map[string][]string{
 		"portNumber":      {"3306"},

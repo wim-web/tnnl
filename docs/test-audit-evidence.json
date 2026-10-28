@@ -1,0 +1,1951 @@
+{
+  "updated_at": "2026-10-28 Asia/Tokyo",
+  "base_commit": "396f7117ab39552e56f62180e2066786de119bca",
+  "revision": "Audited source snapshot; see source_sha256 and merge_validation",
+  "toolchain": "go1.27.3 darwin/arm64 (aqua.yaml pinned)",
+  "inventory": {
+    "go_files": 28,
+    "go_test_functions": 164,
+    "go_runtime_nodes": 444,
+    "go_leaf_cases": 393,
+    "shell_cases": 9,
+    "ci_runtime_assertions": 1,
+    "csv_rows": 403
+  },
+  "baseline": {
+    "command": "go test -race -count=1 -timeout=3m -coverprofile=/tmp/tnnl-q-all-coverage.out -json ./...",
+    "exit_code": 0,
+    "leaf_pass": 393,
+    "fail": 0,
+    "skip": 0,
+    "coverage_percent": 85.4,
+    "coverage_note": "package-local instrumentation; zero coverage does not alone prove no cross-package execution"
+  },
+  "other_checks": {
+    "go_vet": "PASS",
+    "gofmt": "PASS",
+    "shell": {
+      "command": "bash script/verify-release-artifacts_test.sh",
+      "exit_code": 0,
+      "output": "release artifact verifier fixture tests passed"
+    }
+  },
+  "first_attempt": {
+    "command": "go test -race -count=1 -timeout=3m -coverprofile=... -json ./...",
+    "exit_code": 1,
+    "failed_test": "TestVerifyCandidateVersion/matches_unprefixed_candidate_to_prefixed_release",
+    "output": "=== RUN   TestVerifyCandidateVersion/matches_unprefixed_candidate_to_prefixed_release\n    install_test.go:45: verifyCandidateVersion() error = run candidate version: signal: killed\n        context deadline exceeded\n--- FAIL: TestVerifyCandidateVersion/matches_unprefixed_candidate_to_prefixed_release (5.00s)\n",
+    "context": "Initial full run overlapped the intentional turn interruption and the first mutation run. Cause of the 5-second candidate probe timeout was not established. Full race suite and M01 were rerun sequentially without changing source.",
+    "subsequent_full_run_exit_code": 0,
+    "subsequent_m01": "Only expected readiness-filter test failed"
+  },
+  "mutations": {
+    "method": "Copy current Go source, including main_test.go, with go.mod/go.sum to an isolated temporary directory. Apply each original mutation group independently, run go test -count=1 -json ./..., restore originals before the next group. Require expected tests to fail, not merely a nonzero process exit.",
+    "results": [
+      {
+        "id": "M01",
+        "title": "readiness filter removed",
+        "edits": {
+          "internal/target/resolver.go": [
+            "if IsEligibleTask(task) {",
+            "if true {"
+          ]
+        },
+        "command": "go test -count=1 -json ./...",
+        "exit_code": 1,
+        "expected_failed_tests": [
+          "TestResolverEligibleTasksFiltersUnreadyDescribeResults"
+        ],
+        "failed_tests": [
+          "TestResolverEligibleTasksFiltersUnreadyDescribeResults"
+        ],
+        "detected": true,
+        "output": "    resolver_test.go:315: EligibleTasks() ARNs = []string{\"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000001\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000002\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000003\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000004\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000005\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000006\"}, want only ready tasks []string{\"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000002\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000005\"}\n--- FAIL: TestResolverEligibleTasksFiltersUnreadyDescribeResults (0.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/internal/target\t3.269s\n",
+        "stderr": "",
+        "output_scope": "Failure diagnostics only; successful test progress omitted",
+        "full_jsonl_sha256": "d58fbe518e910bcd197bc1b32af94dea63447538665626a6e26a8a18b501fac8"
+      },
+      {
+        "id": "M02",
+        "title": "force truncation removed",
+        "edits": {
+          "internal/input/func.go": [
+            "flags |= os.O_TRUNC",
+            "flags |= 0"
+          ]
+        },
+        "command": "go test -count=1 -json ./...",
+        "exit_code": 1,
+        "expected_failed_tests": [
+          "TestMakeInputFileRefusesExistingFileUnlessForced",
+          "TestNewForceReplacesExistingFile"
+        ],
+        "failed_tests": [
+          "TestNewForceReplacesExistingFile",
+          "TestMakeInputFileRefusesExistingFileUnlessForced"
+        ],
+        "detected": true,
+        "output": "    make_test.go:110: replaced file = \"{\\n  \\\"cluster\\\": \\\"\\\",\\n  \\\"service\\\": \\\"\\\",\\n  \\\"target_port_number\\\": \\\"443\\\",\\n  \\\"local_port_number\\\": \\\"8443\\\"\\n}\\nrold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-cluster\\\",\\\"target_port_number\\\":\\\"80\\\",\\\"local_port_number\\\":\\\"8080\\\"}\" (419 bytes), want \"{\\n  \\\"cluster\\\": \\\"\\\",\\n  \\\"service\\\": \\\"\\\",\\n  \\\"target_port_number\\\": \\\"443\\\",\\n  \\\"local_port_number\\\": \\\"8443\\\"\\n}\\n\" (99 bytes)\n--- FAIL: TestNewForceReplacesExistingFile (0.01s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/inputfile\t0.916s\n    func_test.go:77: forced file = \"{\\n  \\\"cluster\\\": \\\"\\\",\\n  \\\"service\\\": \\\"\\\",\\n  \\\"command\\\": \\\"bash\\\",\\n  \\\"wait\\\": 0\\n}\\ncommandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-command\\\"}\" (366 bytes), want \"{\\n  \\\"cluster\\\": \\\"\\\",\\n  \\\"service\\\": \\\"\\\",\\n  \\\"command\\\": \\\"bash\\\",\\n  \\\"wait\\\": 0\\n}\\n\" (71 bytes)\n--- FAIL: TestMakeInputFileRefusesExistingFileUnlessForced (0.01s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/internal/input\t2.875s\n",
+        "stderr": "",
+        "output_scope": "Failure diagnostics only; successful test progress omitted",
+        "full_jsonl_sha256": "cb63b41642a74299effe0de77449088fb1c418ab7e468ae8671182e3d51277bd"
+      },
+      {
+        "id": "M03",
+        "title": "CLI contexts lose cancellation",
+        "edits": {
+          "cmd/exec/exec.go": [
+            "return run(cmd.Context(), resolved)",
+            "return run(context.WithoutCancel(cmd.Context()), resolved)"
+          ],
+          "cmd/portforward/portforward.go": [
+            "return run(cmd.Context(), resolved)",
+            "return run(context.WithoutCancel(cmd.Context()), resolved)"
+          ],
+          "cmd/remoteportforward/remoteportforward.go": [
+            "return run(cmd.Context(), resolved)",
+            "return run(context.WithoutCancel(cmd.Context()), resolved)"
+          ]
+        },
+        "command": "go test -count=1 -json ./...",
+        "exit_code": 1,
+        "expected_failed_tests": [
+          "TestExecCommandPassesExecuteContextToRunner",
+          "TestPortforwardCommandPassesExecuteContextToRunner",
+          "TestRemotePortforwardCommandPassesExecuteContextToRunner"
+        ],
+        "failed_tests": [
+          "TestExecCommandPassesExecuteContextToRunner",
+          "TestPortforwardCommandPassesExecuteContextToRunner",
+          "TestRemotePortforwardCommandPassesExecuteContextToRunner"
+        ],
+        "detected": true,
+        "output": "    exec_test.go:85: runner deadline = 0001-01-01 00:00:00 +0000 UTC, false, want 2026-10-28 14:54:21.601603 +0900 JST m=+3600.005448584, true\n--- FAIL: TestExecCommandPassesExecuteContextToRunner (0.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/exec\t1.161s\n    portforward_test.go:122: runner deadline = 0001-01-01 00:00:00 +0000 UTC, false, want 2026-10-28 14:54:22.02417 +0900 JST m=+3600.005793001, true\n--- FAIL: TestPortforwardCommandPassesExecuteContextToRunner (0.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/portforward\t1.579s\n    remoteportforward_test.go:150: runner deadline = 0001-01-01 00:00:00 +0000 UTC, false, want 2026-10-28 14:54:22.474429 +0900 JST m=+3600.004879751, true\n--- FAIL: TestRemotePortforwardCommandPassesExecuteContextToRunner (0.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/remoteportforward\t2.009s\n",
+        "stderr": "",
+        "output_scope": "Failure diagnostics only; successful test progress omitted",
+        "full_jsonl_sha256": "e040bd0179ae72d78d737e9f0d009f4a2c940183dde1df76dfd9f772b530328f"
+      },
+      {
+        "id": "M04",
+        "title": "port forwarding document constants changed",
+        "edits": {
+          "pkg/command/portforward.go": [
+            [
+              "\"AWS-StartPortForwardingSession\"",
+              "\"Wrong-PortForwardDocument\""
+            ],
+            [
+              "\"AWS-StartPortForwardingSessionToRemoteHost\"",
+              "\"Wrong-RemotePortForwardDocument\""
+            ]
+          ]
+        },
+        "command": "go test -count=1 -json ./...",
+        "exit_code": 1,
+        "expected_failed_tests": [
+          "TestPortForwardHandlerSelectsSecondReplicaAndAllocatesLocalPort",
+          "TestRemotePortForwardHandlerBuildsExactParameters"
+        ],
+        "failed_tests": [
+          "TestPortForwardHandlerSelectsSecondReplicaAndAllocatesLocalPort",
+          "TestRemotePortForwardHandlerBuildsExactParameters"
+        ],
+        "detected": true,
+        "output": "    portforward_test.go:84: StartSession document = \"Wrong-PortForwardDocument\", want \"AWS-StartPortForwardingSession\"\n--- FAIL: TestPortForwardHandlerSelectsSecondReplicaAndAllocatesLocalPort (0.00s)\n    portforward_test.go:179: document = \"Wrong-RemotePortForwardDocument\", want \"AWS-StartPortForwardingSessionToRemoteHost\"\n--- FAIL: TestRemotePortForwardHandlerBuildsExactParameters (0.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/internal/handler\t2.012s\n",
+        "stderr": "",
+        "output_scope": "Failure diagnostics only; successful test progress omitted",
+        "full_jsonl_sha256": "d84bf74fda5415b633653125d4c1d1e1c2b047d4c7a849cfaf1a074bce27c99a"
+      },
+      {
+        "id": "M05",
+        "title": "cmd.Version hardcoded to dev",
+        "edits": {
+          "cmd/root.go": [
+            [
+              "\"github.com/wim-web/tnnl/internal/buildinfo\"",
+              ""
+            ],
+            [
+              "var Version = buildinfo.Current()",
+              "var Version = \"dev\""
+            ]
+          ]
+        },
+        "command": "go test -count=1 -json ./...",
+        "exit_code": 1,
+        "expected_failed_tests": [
+          "TestCLIBinaryContracts/linker_version/subcommand",
+          "TestCLIBinaryContracts/linker_version/long_flag",
+          "TestCLIBinaryContracts/linker_version/short_flag"
+        ],
+        "failed_tests": [
+          "TestCLIBinaryContracts/linker_version/subcommand",
+          "TestCLIBinaryContracts/linker_version/long_flag",
+          "TestCLIBinaryContracts/linker_version/short_flag",
+          "TestCLIBinaryContracts/linker_version",
+          "TestCLIBinaryContracts"
+        ],
+        "detected": true,
+        "output": "    main_test.go:39: version output = \"dev\\n\", want linker version 1.2.3\n--- FAIL: TestCLIBinaryContracts/linker_version/subcommand (2.36s)\n    main_test.go:39: version output = \"dev\\n\", want linker version 1.2.3\n--- FAIL: TestCLIBinaryContracts/linker_version/long_flag (0.01s)\n    main_test.go:39: version output = \"dev\\n\", want linker version 1.2.3\n--- FAIL: TestCLIBinaryContracts/linker_version/short_flag (0.01s)\n--- FAIL: TestCLIBinaryContracts/linker_version (2.38s)\n--- FAIL: TestCLIBinaryContracts (3.08s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl\t3.878s\n",
+        "stderr": "",
+        "output_scope": "Failure diagnostics only; successful test progress omitted",
+        "full_jsonl_sha256": "e505a66838b8bbe5cc0a3d812028ade1d9f5c870b074bbbb9b17a1d35fbb8504"
+      }
+    ]
+  },
+  "q06_q13_validation": {
+    "method": "Targeted tests and isolated Go overlays; changes applied only to overlay copies. Require the intended test or nil-safety case to fail.",
+    "results": {
+      "q0611": {
+        "changes": [
+          {
+            "audit_id": "Q06",
+            "action": "候補のversion実行時にshell自身の$0を記録し、stage directoryの親をcurrent executableの親と直接比較",
+            "reason": "無効TMPDIRで成功するだけでは任意の別ディレクトリでも通った。実候補pathの観測を加えて隣接stagingを保証。TMPDIR非依存と正常置換の既存検証は維持。"
+          },
+          {
+            "audit_id": "Q11",
+            "action": "writer失敗をalready-latest/updatedの2経路で確認し、updatedではcandidate bytesと0755の更新済みfileを検証",
+            "reason": "status出力の失敗を返す契約と、出力時点で置換が完了している副作用の両方を確認。already-latestでは元file不変も確認。"
+          }
+        ],
+        "tests": [
+          {
+            "file": "cmd/update/orchestration_test.go",
+            "name": "TestUpdaterStagesCandidateBesideExecutable",
+            "protects": "候補version process自身が観測した実行pathから、stage directoryが更新対象exeの親directory直下にあることを確認。無効TMPDIRでも更新でき、最後にcandidate bytesがinstalledであることも保持。",
+            "production_path": "updater.run → os.MkdirTemp → download/checksum/extract → verifyCandidateVersion実process → replaceExecutable",
+            "rationale": "期待pathを本番MkdirTempから作らず、候補processの$0と元exeの親を独立比較。別の有効な祖先directoryへstagingする変異を検出済み。",
+            "action": "Q06対応済み。隣接stagingを直接観測する回帰テストとして維持。",
+            "case_notes": "単独ケース。fixture候補scriptにpath記録を追加しarchive/checksumを再構成。TMPDIR不使用の保証も残す。"
+          },
+          {
+            "file": "cmd/update/orchestration_test.go",
+            "name": "TestUpdaterReturnsOutputError",
+            "protects": "already-latest/updatedの両方でwriter errorのcauseとwrite update status文脈を返す。前者は旧file不変、後者はcandidate bytesと0755が既に反映済みであることを確認。",
+            "production_path": "updater.run → currentVersion/HTTP/検証/置換 → status fmt.Fprintf",
+            "rationale": "更新後のwriter失敗を実HTTP/archive/process/file経路で検証。statusを置換前へ移動する変異と、更新後writer errorを無視する変異の両方を検出済み。",
+            "action": "Q11対応済み。成功statusではなく更新副作用と返却errorの組合せを維持。",
+            "case_notes": "already latest / updated の2subtest。"
+          }
+        ],
+        "validation": [
+          {
+            "command": "gofmt -w cmd/update/orchestration_test.go",
+            "exit_code": 0
+          },
+          {
+            "command": "go test -count=1 ./cmd/update -run '^TestUpdater(StagesCandidateBesideExecutable|ReturnsOutputError)$'",
+            "exit_code": 0,
+            "output": "ok github.com/wim-web/tnnl/cmd/update 2.236s"
+          }
+        ],
+        "mutations": [
+          {
+            "id": "Q06-stage-parent",
+            "audit_id": "Q06",
+            "description": "stage in a valid ancestor directory",
+            "file": "cmd/update/update.go",
+            "before": "os.MkdirTemp(filepath.Dir(executable), \".tnnl-update-*\")",
+            "after": "os.MkdirTemp(filepath.Dir(filepath.Dir(executable)), \".tnnl-update-*\")",
+            "command": "go test -count=1 -json -overlay=<isolated overlay> -run ^TestUpdaterStagesCandidateBesideExecutable$ ./cmd/update",
+            "exit_code": 1,
+            "failed_tests": [
+              "TestUpdaterStagesCandidateBesideExecutable"
+            ],
+            "output": "=== RUN   TestUpdaterStagesCandidateBesideExecutable\n    orchestration_test.go:81: candidate executed at \"/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestUpdaterStagesCandidateBesideExecutable152892335/.tnnl-update-4007920457/tnnl\", want staging directory directly inside executable directory \"/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestUpdaterStagesCandidateBesideExecutable152892335/001\"\n--- FAIL: TestUpdaterStagesCandidateBesideExecutable (0.99s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/update\t1.667s\n",
+            "stderr": "",
+            "detected": true
+          },
+          {
+            "id": "Q11-status-before-replace",
+            "audit_id": "Q11",
+            "description": "write status before replacement",
+            "file": "cmd/update/update.go",
+            "before": "\tif err := replaceExecutable(executable, candidatePath); err != nil {\n\t\treturn err\n\t}\n\n\tif _, err := fmt.Fprintf(out, \"updated: v%s -> %s\\n\", current, latest.TagName); err != nil {\n\t\treturn fmt.Errorf(\"write update status: %w\", err)\n\t}\n",
+            "after": "\tif _, err := fmt.Fprintf(out, \"updated: v%s -> %s\\n\", current, latest.TagName); err != nil {\n\t\treturn fmt.Errorf(\"write update status: %w\", err)\n\t}\n\tif err := replaceExecutable(executable, candidatePath); err != nil {\n\t\treturn err\n\t}\n",
+            "command": "go test -count=1 -json -overlay=<isolated overlay> -run ^TestUpdaterReturnsOutputError$ ./cmd/update",
+            "exit_code": 1,
+            "failed_tests": [
+              "TestUpdaterReturnsOutputError/updated",
+              "TestUpdaterReturnsOutputError"
+            ],
+            "output": "=== RUN   TestUpdaterReturnsOutputError\n=== RUN   TestUpdaterReturnsOutputError/updated\n    orchestration_test.go:219: executable after status write failure = \"#!/bin/sh\\nif [ \\\"$1\\\" = version ]; then\\n  printf '%s\\\\n' '1.0.0'\\n  exit 0\\nfi\\nexit 64\\n\", want installed candidate \"#!/bin/sh\\nif [ \\\"$1\\\" = version ]; then\\n  printf '%s\\\\n' '1.2.3'\\n  exit 0\\nfi\\nexit 64\\n\"\n--- FAIL: TestUpdaterReturnsOutputError/updated (0.27s)\n--- FAIL: TestUpdaterReturnsOutputError (0.44s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/update\t0.837s\n",
+            "stderr": "",
+            "detected": true
+          },
+          {
+            "id": "Q11-swallow-output-error",
+            "audit_id": "Q11",
+            "description": "ignore post-update writer failure",
+            "file": "cmd/update/update.go",
+            "before": "\tif _, err := fmt.Fprintf(out, \"updated: v%s -> %s\\n\", current, latest.TagName); err != nil {\n\t\treturn fmt.Errorf(\"write update status: %w\", err)\n\t}\n",
+            "after": "\tif _, err := fmt.Fprintf(out, \"updated: v%s -> %s\\n\", current, latest.TagName); err != nil {\n\t\treturn nil\n\t}\n",
+            "command": "go test -count=1 -json -overlay=<isolated overlay> -run ^TestUpdaterReturnsOutputError$ ./cmd/update",
+            "exit_code": 1,
+            "failed_tests": [
+              "TestUpdaterReturnsOutputError/updated",
+              "TestUpdaterReturnsOutputError"
+            ],
+            "output": "=== RUN   TestUpdaterReturnsOutputError\n=== RUN   TestUpdaterReturnsOutputError/updated\n    orchestration_test.go:208: updater.run() error = <nil>, want wrapped status write error write failed\n--- FAIL: TestUpdaterReturnsOutputError/updated (0.26s)\n--- FAIL: TestUpdaterReturnsOutputError (0.38s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/update\t0.762s\n",
+            "stderr": "",
+            "detected": true
+          }
+        ]
+      },
+      "q07": {
+        "changes": [
+          {
+            "audit_id": "Q07",
+            "action": "candidate open/copy失敗ケースのcurrentPathを既存の保存対象snapshotへ追加",
+            "reason": "通常の旧実行ファイルについて内容・mode・identityを比較し、他人のtemp/sentinelと自己temp cleanupの保証も維持。create temp/renameの異常target fixtureは通常file保存の証拠として扱わない。"
+          }
+        ],
+        "tests": [
+          {
+            "file": "cmd/update/install_test.go",
+            "name": "TestReplaceExecutableFailureCleansUpOnlyOwnTemp",
+            "protects": "candidate open/copy失敗時に旧current通常fileのbytes・mode・identityが保存される。全失敗ケースで他人のtemp/sentinelを保存し、自分のtempだけをcleanupする。",
+            "production_path": "updater.run → replaceExecutable → candidate open/copy / replacement temp creation / rename / deferred cleanup",
+            "rationale": "candidate open/copyの2ケースでcurrentPathの事前snapshotをpreservedFilesへ登録し、既存assertionでos.SameFile・Mode・内容を独立比較。異常targetを作るcreate temp/renameは通常current保存と区別。内容破壊・mode変更・identity置換の各変異を両ケースが検出した。",
+            "action": "Q07対応完了。維持。",
+            "case_notes": "4 leaf: candidate open / candidate copy は通常currentの3保証を追加。create temp / rename は他人のfile保護と自己temp cleanupの既存保証を維持。"
+          }
+        ],
+        "validation": [
+          {
+            "command": "gofmt -w cmd/update/install_test.go",
+            "result": "PASS"
+          },
+          {
+            "command": "go test -count=1 ./cmd/update -run ^TestReplaceExecutableFailureCleansUpOnlyOwnTemp$",
+            "exit_code": 0,
+            "output": "ok github.com/wim-web/tnnl/cmd/update 0.459s"
+          }
+        ],
+        "mutations": [
+          {
+            "id": "Q07-content",
+            "title": "old current bytes are overwritten before candidate open/copy",
+            "file": "cmd/update/install.go",
+            "injection": "\t_ = os.WriteFile(currentPath, []byte(\"broken\"), 0o640)\n",
+            "command": [
+              "go",
+              "test",
+              "-count=1",
+              "-json",
+              "-overlay=/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/tnnl-q07-p172tozi/overlay.json",
+              "-run",
+              "^TestReplaceExecutableFailureCleansUpOnlyOwnTemp$/(candidate_open|candidate_copy)$",
+              "./cmd/update"
+            ],
+            "exit_code": 1,
+            "expected_failed_tests": [
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_open",
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_copy"
+            ],
+            "failed_tests": [
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_open",
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_copy",
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp"
+            ],
+            "detected": true,
+            "output": "    install_test.go:278: preserved file \"/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestReplaceExecutableFailureCleansUpOnlyOwnTempcandidate_open1603963134/001/tnnl\" content = \"broken\", want \"old\"\n--- FAIL: TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_open (0.00s)\n    install_test.go:294: preserved file \"/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestReplaceExecutableFailureCleansUpOnlyOwnTempcandidate_copy431745582/001/tnnl\" content = \"broken\", want \"old\"\n--- FAIL: TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_copy (0.00s)\n--- FAIL: TestReplaceExecutableFailureCleansUpOnlyOwnTemp (0.01s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/update\t0.384s\n",
+            "stderr": ""
+          },
+          {
+            "id": "Q07-mode",
+            "title": "old current mode is changed before candidate open/copy",
+            "file": "cmd/update/install.go",
+            "injection": "\t_ = os.Chmod(currentPath, 0o755)\n",
+            "command": [
+              "go",
+              "test",
+              "-count=1",
+              "-json",
+              "-overlay=/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/tnnl-q07-amru_xys/overlay.json",
+              "-run",
+              "^TestReplaceExecutableFailureCleansUpOnlyOwnTemp$/(candidate_open|candidate_copy)$",
+              "./cmd/update"
+            ],
+            "exit_code": 1,
+            "expected_failed_tests": [
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_open",
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_copy"
+            ],
+            "failed_tests": [
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_open",
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_copy",
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp"
+            ],
+            "detected": true,
+            "output": "    install_test.go:278: preserved file \"/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestReplaceExecutableFailureCleansUpOnlyOwnTempcandidate_open705702622/001/tnnl\" mode = -rwxr-xr-x, want -rw-r-----\n--- FAIL: TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_open (0.00s)\n    install_test.go:294: preserved file \"/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestReplaceExecutableFailureCleansUpOnlyOwnTempcandidate_copy1266522755/001/tnnl\" mode = -rwxr-xr-x, want -rw-r-----\n--- FAIL: TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_copy (0.00s)\n--- FAIL: TestReplaceExecutableFailureCleansUpOnlyOwnTemp (0.01s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/update\t0.387s\n",
+            "stderr": ""
+          },
+          {
+            "id": "Q07-identity",
+            "title": "old current inode is replaced with same-content file before candidate open/copy",
+            "file": "cmd/update/install.go",
+            "injection": "\tmutationData, _ := os.ReadFile(currentPath)\n\tmutationInfo, _ := os.Stat(currentPath)\n\tmutationPath := currentPath + \".mutation\"\n\t_ = os.WriteFile(mutationPath, mutationData, mutationInfo.Mode().Perm())\n\t_ = os.Rename(mutationPath, currentPath)\n",
+            "command": [
+              "go",
+              "test",
+              "-count=1",
+              "-json",
+              "-overlay=/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/tnnl-q07-lh27ptsk/overlay.json",
+              "-run",
+              "^TestReplaceExecutableFailureCleansUpOnlyOwnTemp$/(candidate_open|candidate_copy)$",
+              "./cmd/update"
+            ],
+            "exit_code": 1,
+            "expected_failed_tests": [
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_open",
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_copy"
+            ],
+            "failed_tests": [
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_open",
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_copy",
+              "TestReplaceExecutableFailureCleansUpOnlyOwnTemp"
+            ],
+            "detected": true,
+            "output": "    install_test.go:278: preserved file \"/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestReplaceExecutableFailureCleansUpOnlyOwnTempcandidate_open2597601840/001/tnnl\" was replaced\n--- FAIL: TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_open (0.00s)\n    install_test.go:294: preserved file \"/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestReplaceExecutableFailureCleansUpOnlyOwnTempcandidate_copy183707165/001/tnnl\" was replaced\n--- FAIL: TestReplaceExecutableFailureCleansUpOnlyOwnTemp/candidate_copy (0.00s)\n--- FAIL: TestReplaceExecutableFailureCleansUpOnlyOwnTemp (0.01s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/update\t0.611s\n",
+            "stderr": ""
+          }
+        ]
+      },
+      "q08": {
+        "changes": [
+          {
+            "audit_id": "Q08",
+            "action": "実行中binary/PATH/symlinkを使う実resolver試験を追加し、TempDir外go-buildと類似prefixの判定を分離。発見したgo-builder誤選択を最小修正。",
+            "reason": "通常自身・起動symlink・別basename・custom go-build・system temp・PATH symlink・PATH欠落・似たgo-builder directoryを実子processで検証。現行GoはMkdirTemp(...,\"go-build\")＋10進数字を生成。従来の部分文字列判定はgo-builder等を誤認し、別PATH binaryを更新対象にしていた。",
+            "production_change": "cmd/update/update.go shouldUsePathBinaryをdirectory segmentごとのgo-build＋数字判定へ限定。既存exact go-build互換は維持。更新処理自体は実行せず、実ユーザーbinary変更なし。"
+          }
+        ],
+        "tests": [
+          {
+            "file": "cmd/update/update_test.go",
+            "name": "TestShouldUsePathBinary",
+            "protects": "自身維持・別basename・system temp・TempDir外go-build＋数字・exact go-buildを区別し、temp隣接prefix/go-builder/go-build-tools/go-build123extra/my-go-build123を誤認しない。",
+            "production_path": "resolveTargetExecutablePath → shouldUsePathBinary → PATH探索の要否",
+            "rationale": "TMPDIRを独立fixtureへ設定してgo-build分岐をsystem temp条件から分離。旧実装では類似prefix3caseがFAILし、segment判定修正後にPASS。",
+            "action": "Q08対応完了。現行10caseを維持。",
+            "case_notes": "10ケース。新規7ケースにより重なるtemp条件だけでは通らない境界を確認。"
+          },
+          {
+            "file": "cmd/update/path_test.go",
+            "name": "TestResolveTargetExecutablePath",
+            "protects": "実os.Executable/LookPath/EvalSymlinksによる更新対象選択。通常自身、起動symlink、別basename、custom go-run directory、system temp、PATH symlink、PATH欠落fallback、go-builder誤認防止。",
+            "production_path": "helper子process → resolveTargetExecutablePath → os.Executable → resolveSymlinkPath → shouldUsePathBinary → exec.LookPath → resolveSymlinkPath",
+            "rationale": "注入なしで実resolverを呼ぶ。test実行ファイルを専用fixture名で起動し、PATHとTMPDIRを独立fixtureに閉じ込め、期待値はfixture構造から直接指定。本番パス更新やAWS接続は行わない。",
+            "action": "Q08対応完了。8実processケースを維持。",
+            "case_notes": "Darwin/Linuxの8ケース。helperは同一Test関数をenv/-test.runで再起動し結果fileを返す。10秒context＋WaitDelay、hardlink不可時はcopyへfallback。"
+          }
+        ],
+        "validation": [
+          {
+            "command": "gofmt -w cmd/update/update.go cmd/update/update_test.go cmd/update/path_test.go",
+            "exit_code": 0
+          },
+          {
+            "command": "go test -count=1 ./cmd/update -run '^(TestShouldUsePathBinary|TestResolveTargetExecutablePath)$'",
+            "exit_code": 0,
+            "output": "ok github.com/wim-web/tnnl/cmd/update 0.465s"
+          }
+        ],
+        "regression_reproduction": {
+          "description": "テスト追加後・本番修正前。go-builderインストール実processが別PATH binaryを選ぶ不具合と類似prefix3つを検出。",
+          "command": "go test -count=1 ./cmd/update -run '^(TestShouldUsePathBinary|TestResolveTargetExecutablePath)$'",
+          "exit_code": 1,
+          "output": "--- FAIL: TestResolveTargetExecutablePath (0.07s)\n    --- FAIL: TestResolveTargetExecutablePath/similar_go_builder_directory_keeps_itself (0.01s)\n        path_test.go:116: resolved update target = \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathsimilar_go_builder_directory_kee2880249980/001/path-bin/tnnl\", want \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathsimilar_go_builder_directory_kee2880249980/001/go-builder/tnnl\"\n--- FAIL: TestShouldUsePathBinary (0.00s)\n    --- FAIL: TestShouldUsePathBinary/go_builder_is_an_installed_directory (0.00s)\n        update_test.go:247: shouldUsePathBinary() = true, want false (in=\"/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestShouldUsePathBinary1835363826/001/go-builder/tnnl\")\n    --- FAIL: TestShouldUsePathBinary/go_build_tools_is_an_installed_directory (0.00s)\n        update_test.go:247: shouldUsePathBinary() = true, want false (in=\"/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestShouldUsePathBinary1835363826/001/go-build-tools/tnnl\")\n    --- FAIL: TestShouldUsePathBinary/go_build_numeric_prefix_needs_a_boundary (0.00s)\n        update_test.go:247: shouldUsePathBinary() = true, want false (in=\"/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestShouldUsePathBinary1835363826/001/go-build123extra/tnnl\")\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/update\t0.458s\nFAIL\n"
+        },
+        "mutations": [
+          {
+            "id": "Q08-skip-PATH",
+            "command": "go test -count=1 -json -overlay=/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/tnnl-q08-mutation-ya_3mpwz/overlay.json ./cmd/update -run ^TestResolveTargetExecutablePath$",
+            "edits": {
+              "cmd/update/update.go": [
+                "if shouldUsePathBinary(exePath) {",
+                "if false {"
+              ]
+            },
+            "exit_code": 1,
+            "expected_failed_tests": [
+              "TestResolveTargetExecutablePath/other_executable_name_uses_PATH",
+              "TestResolveTargetExecutablePath/custom_go_run_directory_uses_PATH",
+              "TestResolveTargetExecutablePath/system_temporary_directory_uses_PATH"
+            ],
+            "failed_tests": [
+              "TestResolveTargetExecutablePath/other_executable_name_uses_PATH",
+              "TestResolveTargetExecutablePath/custom_go_run_directory_uses_PATH",
+              "TestResolveTargetExecutablePath/system_temporary_directory_uses_PATH",
+              "TestResolveTargetExecutablePath/PATH_symlink_resolves_to_target",
+              "TestResolveTargetExecutablePath"
+            ],
+            "detected": true,
+            "output": "    path_test.go:116: resolved update target = \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathother_executable_name_uses_PATH320560942/001/installed/main\", want \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathother_executable_name_uses_PATH320560942/001/path-bin/tnnl\"\n--- FAIL: TestResolveTargetExecutablePath/other_executable_name_uses_PATH (0.01s)\n    path_test.go:116: resolved update target = \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathcustom_go_run_directory_uses_PAT148226894/001/custom-tmp/go-build123/b001/exe/tnnl\", want \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathcustom_go_run_directory_uses_PAT148226894/001/path-bin/tnnl\"\n--- FAIL: TestResolveTargetExecutablePath/custom_go_run_directory_uses_PATH (0.01s)\n    path_test.go:116: resolved update target = \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathsystem_temporary_directory_uses_3172709/001/temporary/tnnl\", want \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathsystem_temporary_directory_uses_3172709/001/path-bin/tnnl\"\n--- FAIL: TestResolveTargetExecutablePath/system_temporary_directory_uses_PATH (0.01s)\n    path_test.go:116: resolved update target = \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathPATH_symlink_resolves_to_target180247319/001/installed/main\", want \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathPATH_symlink_resolves_to_target180247319/001/versioned-tnnl\"\n--- FAIL: TestResolveTargetExecutablePath/PATH_symlink_resolves_to_target (0.01s)\n--- FAIL: TestResolveTargetExecutablePath (0.07s)\n"
+          },
+          {
+            "id": "Q08-PATH-symlink-not-resolved",
+            "command": "go test -count=1 -json -overlay=/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/tnnl-q08-mutation-gev0xbew/overlay.json ./cmd/update -run ^TestResolveTargetExecutablePath$",
+            "edits": {
+              "cmd/update/update.go": [
+                "return resolveSymlinkPath(lookedUpPath), nil",
+                "return lookedUpPath, nil"
+              ]
+            },
+            "exit_code": 1,
+            "expected_failed_tests": [
+              "TestResolveTargetExecutablePath/PATH_symlink_resolves_to_target"
+            ],
+            "failed_tests": [
+              "TestResolveTargetExecutablePath/PATH_symlink_resolves_to_target",
+              "TestResolveTargetExecutablePath"
+            ],
+            "detected": true,
+            "output": "    path_test.go:116: resolved update target = \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathPATH_symlink_resolves_to_target4250391028/001/path-bin/tnnl\", want \"/private/var/folders/vx/f41fn7sj1qz2d7n11zk5s8mw0000gn/T/TestResolveTargetExecutablePathPATH_symlink_resolves_to_target4250391028/001/versioned-tnnl\"\n--- FAIL: TestResolveTargetExecutablePath/PATH_symlink_resolves_to_target (0.01s)\n--- FAIL: TestResolveTargetExecutablePath (0.07s)\n"
+          }
+        ],
+        "local_reference": {
+          "go_version": "go1.27.3",
+          "work_directory": "GOROOT/src/cmd/go/internal/work/action.go:298 os.MkdirTemp(cfg.Getenv(\"GOTMPDIR\"), \"go-build\")",
+          "numeric_suffix": "GOROOT/src/os/tempfile.go:24-25 strconv.FormatUint(uint64(uint32(runtime_rand())), 10)"
+        }
+      },
+      "q09": {
+        "changes": [
+          {
+            "audit_id": "Q09",
+            "action": "総崩れnilケースを単一nilフィールドの6ケースへ分解し、混在container fixtureの重複nil集合を削除",
+            "reason": "各caseはfullyReadyTaskから対象fieldだけをnilにするため、そのfieldの本番判定へ到達する。既存ready/状態/空文字/agent不在の契約を維持。"
+          }
+        ],
+        "tests": [
+          {
+            "file": "internal/target/eligibility_test.go",
+            "name": "TestEligibleTaskRequiresReadyTaskAndContainer",
+            "protects": "taskのRUNNING/Exec有効/ARN、containerのname/RUNNING/runtime、ExecuteCommandAgentのRUNNINGを要求する。Task.LastStatus/TaskArn、Container.Name/LastStatus/RuntimeId、ManagedAgent.LastStatusが各々単独nilでもpanicせず不適格とする。",
+            "production_path": "Resolver.EligibleTasks → IsEligibleTask → EligibleContainers → hasRunningExecuteCommandAgent",
+            "rationale": "18case。各nil caseは他の全fieldをreadyに保つので先行条件による短絡がなく、6つの安全なpointer読取を直接保護する。各aws.ToStringをunsafe dereferenceにする6変異を全て対応caseで検出。",
+            "action": "Q09対応完了。維持。",
+            "case_notes": "既存12case維持。旧nil pointers 1caseをnil task status / nil task ARN / nil container name / nil container status / nil runtime ID / nil execute command agent statusの6caseに置換。"
+          },
+          {
+            "file": "internal/target/eligibility_test.go",
+            "name": "TestEligibleContainersReturnsOnlyReadyContainers",
+            "protects": "name欠損、STOPPED、runtime欠損、agent不在/未readyが混じる応答からready containerのみを値ごと保持して返す。",
+            "production_path": "Resolver/ResolveTarget → EligibleContainers",
+            "rationale": "mixed responseのフィルタ契約を維持。Name=nilですぐ短絡する総崩れnilPointers fixtureはmissingNameと重複するので削除。各nil安全性はTestEligibleTaskRequiresReadyTaskAndContainerの6caseで直接保護。",
+            "action": "Q09対応完了。維持。",
+            "case_notes": "単一mixed response case。ready1件＋不適格5件。"
+          }
+        ],
+        "validation": [
+          {
+            "command": "gofmt -w internal/target/eligibility_test.go",
+            "result": "PASS"
+          },
+          {
+            "command": "go test -count=1 -run '^TestEligible(TaskRequiresReadyTaskAndContainer|ContainersReturnsOnlyReadyContainers)$' ./internal/target",
+            "exit_code": 0,
+            "result": "PASS"
+          }
+        ],
+        "mutations": [
+          {
+            "id": "Q09-N01",
+            "case": "nil task status",
+            "edit": {
+              "file": "internal/target/eligibility.go",
+              "before": "aws.ToString(task.LastStatus)",
+              "after": "*task.LastStatus"
+            },
+            "command": "go test -count=1 -json -overlay=<isolated overlay> -run ^TestEligibleTaskRequiresReadyTaskAndContainer$/^nil_task_status$ ./internal/target",
+            "exit_code": 1,
+            "detected": true,
+            "expected_failed_test": "TestEligibleTaskRequiresReadyTaskAndContainer/nil_task_status",
+            "output": "=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer\n=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer/nil_task_status\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer/nil_task_status (0.00s)\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer (0.00s)\npanic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]\n[signal SIGSEGV: segmentation violation code=0x2 addr=0x0 pc=0x1007a82fc]\n\ngoroutine 9 [running]:\ntesting.tRunner.func1.2({0x100a3c500, 0x100ac25d0})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2125 +0x1a0\ntesting.tRunner.func1()\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2128 +0x2c8\npanic({0x100a3c500?, 0x100ac25d0?})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/runtime/panic.go:859 +0x120\ngithub.com/wim-web/tnnl/internal/target.EligibleContainers({{0x0, 0x0, 0x0}, {0x0, 0x0, 0x0}, 0x0, 0x0, 0x0, {0x0, ...}, ...})\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:15 +0x2c\ngithub.com/wim-web/tnnl/internal/target.IsEligibleTask(...)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:35\ngithub.com/wim-web/tnnl/internal/target.TestEligibleTaskRequiresReadyTaskAndContainer.func18(0x43e0eab2ab48)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility_test.go:134 +0x10c\ntesting.tRunner(0x43e0eab2ab48, 0x43e0eac40390)\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2195 +0xc4\ncreated by testing.(*T).Run in goroutine 8\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2260 +0x3b8\nFAIL\tgithub.com/wim-web/tnnl/internal/target\t0.390s\n",
+            "stderr": ""
+          },
+          {
+            "id": "Q09-N02",
+            "case": "nil task ARN",
+            "edit": {
+              "file": "internal/target/eligibility.go",
+              "before": "aws.ToString(task.TaskArn)",
+              "after": "*task.TaskArn"
+            },
+            "command": "go test -count=1 -json -overlay=<isolated overlay> -run ^TestEligibleTaskRequiresReadyTaskAndContainer$/^nil_task_ARN$ ./internal/target",
+            "exit_code": 1,
+            "detected": true,
+            "expected_failed_test": "TestEligibleTaskRequiresReadyTaskAndContainer/nil_task_ARN",
+            "output": "=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer\n=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer/nil_task_ARN\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer/nil_task_ARN (0.00s)\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer (0.00s)\npanic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]\n[signal SIGSEGV: segmentation violation code=0x2 addr=0x0 pc=0x104f9434c]\n\ngoroutine 7 [running]:\ntesting.tRunner.func1.2({0x105228500, 0x1052ae5d0})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2125 +0x1a0\ntesting.tRunner.func1()\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2128 +0x2c8\npanic({0x105228500?, 0x1052ae5d0?})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/runtime/panic.go:859 +0x120\ngithub.com/wim-web/tnnl/internal/target.EligibleContainers({{0x0, 0x0, 0x0}, {0x0, 0x0, 0x0}, 0x0, 0x0, 0x0, {0x0, ...}, ...})\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:16 +0x7c\ngithub.com/wim-web/tnnl/internal/target.IsEligibleTask(...)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:35\ngithub.com/wim-web/tnnl/internal/target.TestEligibleTaskRequiresReadyTaskAndContainer.func18(0x7de39f0dcb48)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility_test.go:134 +0x10c\ntesting.tRunner(0x7de39f0dcb48, 0x7de39f1ec4e0)\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2195 +0xc4\ncreated by testing.(*T).Run in goroutine 6\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2260 +0x3b8\nFAIL\tgithub.com/wim-web/tnnl/internal/target\t0.681s\n",
+            "stderr": ""
+          },
+          {
+            "id": "Q09-N03",
+            "case": "nil container name",
+            "edit": {
+              "file": "internal/target/eligibility.go",
+              "before": "aws.ToString(container.Name)",
+              "after": "*container.Name"
+            },
+            "command": "go test -count=1 -json -overlay=<isolated overlay> -run ^TestEligibleTaskRequiresReadyTaskAndContainer$/^nil_container_name$ ./internal/target",
+            "exit_code": 1,
+            "detected": true,
+            "expected_failed_test": "TestEligibleTaskRequiresReadyTaskAndContainer/nil_container_name",
+            "output": "=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer\n=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer/nil_container_name\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer/nil_container_name (0.00s)\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer (0.00s)\npanic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]\n[signal SIGSEGV: segmentation violation code=0x2 addr=0x0 pc=0x103174408]\n\ngoroutine 37 [running]:\ntesting.tRunner.func1.2({0x103408500, 0x10348e5d0})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2125 +0x1a0\ntesting.tRunner.func1()\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2128 +0x2c8\npanic({0x103408500?, 0x10348e5d0?})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/runtime/panic.go:859 +0x120\ngithub.com/wim-web/tnnl/internal/target.EligibleContainers({{0x0, 0x0, 0x0}, {0x0, 0x0, 0x0}, 0x0, 0x0, 0x0, {0x0, ...}, ...})\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:22 +0x138\ngithub.com/wim-web/tnnl/internal/target.IsEligibleTask(...)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:35\ngithub.com/wim-web/tnnl/internal/target.TestEligibleTaskRequiresReadyTaskAndContainer.func18(0x614c2a828fc8)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility_test.go:134 +0x10c\ntesting.tRunner(0x614c2a828fc8, 0x614c2a82a630)\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2195 +0xc4\ncreated by testing.(*T).Run in goroutine 36\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2260 +0x3b8\nFAIL\tgithub.com/wim-web/tnnl/internal/target\t0.350s\n",
+            "stderr": ""
+          },
+          {
+            "id": "Q09-N04",
+            "case": "nil container status",
+            "edit": {
+              "file": "internal/target/eligibility.go",
+              "before": "aws.ToString(container.LastStatus)",
+              "after": "*container.LastStatus"
+            },
+            "command": "go test -count=1 -json -overlay=<isolated overlay> -run ^TestEligibleTaskRequiresReadyTaskAndContainer$/^nil_container_status$ ./internal/target",
+            "exit_code": 1,
+            "detected": true,
+            "expected_failed_test": "TestEligibleTaskRequiresReadyTaskAndContainer/nil_container_status",
+            "output": "=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer\n=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer/nil_container_status\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer/nil_container_status (0.00s)\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer (0.00s)\npanic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]\n[signal SIGSEGV: segmentation violation code=0x2 addr=0x0 pc=0x1026c4438]\n\ngoroutine 37 [running]:\ntesting.tRunner.func1.2({0x102958500, 0x1029de5d0})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2125 +0x1a0\ntesting.tRunner.func1()\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2128 +0x2c8\npanic({0x102958500?, 0x1029de5d0?})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/runtime/panic.go:859 +0x120\ngithub.com/wim-web/tnnl/internal/target.EligibleContainers({{0x0, 0x0, 0x0}, {0x0, 0x0, 0x0}, 0x0, 0x0, 0x0, {0x0, ...}, ...})\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:23 +0x168\ngithub.com/wim-web/tnnl/internal/target.IsEligibleTask(...)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:35\ngithub.com/wim-web/tnnl/internal/target.TestEligibleTaskRequiresReadyTaskAndContainer.func18(0x1f14fc8eb48)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility_test.go:134 +0x10c\ntesting.tRunner(0x1f14fc8eb48, 0x1f14fdaa780)\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2195 +0xc4\ncreated by testing.(*T).Run in goroutine 36\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2260 +0x3b8\nFAIL\tgithub.com/wim-web/tnnl/internal/target\t0.366s\n",
+            "stderr": ""
+          },
+          {
+            "id": "Q09-N05",
+            "case": "nil runtime ID",
+            "edit": {
+              "file": "internal/target/eligibility.go",
+              "before": "aws.ToString(container.RuntimeId)",
+              "after": "*container.RuntimeId"
+            },
+            "command": "go test -count=1 -json -overlay=<isolated overlay> -run ^TestEligibleTaskRequiresReadyTaskAndContainer$/^nil_runtime_ID$ ./internal/target",
+            "exit_code": 1,
+            "detected": true,
+            "expected_failed_test": "TestEligibleTaskRequiresReadyTaskAndContainer/nil_runtime_ID",
+            "output": "=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer\n=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer/nil_runtime_ID\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer/nil_runtime_ID (0.00s)\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer (0.00s)\npanic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]\n[signal SIGSEGV: segmentation violation code=0x2 addr=0x0 pc=0x1023ec4a8]\n\ngoroutine 21 [running]:\ntesting.tRunner.func1.2({0x102680500, 0x1027065d0})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2125 +0x1a0\ntesting.tRunner.func1()\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2128 +0x2c8\npanic({0x102680500?, 0x1027065d0?})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/runtime/panic.go:859 +0x120\ngithub.com/wim-web/tnnl/internal/target.EligibleContainers({{0x0, 0x0, 0x0}, {0x0, 0x0, 0x0}, 0x0, 0x0, 0x0, {0x0, ...}, ...})\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:24 +0x1d8\ngithub.com/wim-web/tnnl/internal/target.IsEligibleTask(...)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:35\ngithub.com/wim-web/tnnl/internal/target.TestEligibleTaskRequiresReadyTaskAndContainer.func18(0x6cd192d92b48)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility_test.go:134 +0x10c\ntesting.tRunner(0x6cd192d92b48, 0x6cd192eae8d0)\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2195 +0xc4\ncreated by testing.(*T).Run in goroutine 20\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2260 +0x3b8\nFAIL\tgithub.com/wim-web/tnnl/internal/target\t0.358s\n",
+            "stderr": ""
+          },
+          {
+            "id": "Q09-N06",
+            "case": "nil execute command agent status",
+            "edit": {
+              "file": "internal/target/eligibility.go",
+              "before": "aws.ToString(agent.LastStatus)",
+              "after": "*agent.LastStatus"
+            },
+            "command": "go test -count=1 -json -overlay=<isolated overlay> -run ^TestEligibleTaskRequiresReadyTaskAndContainer$/^nil_execute_command_agent_status$ ./internal/target",
+            "exit_code": 1,
+            "detected": true,
+            "expected_failed_test": "TestEligibleTaskRequiresReadyTaskAndContainer/nil_execute_command_agent_status",
+            "output": "=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer\n=== RUN   TestEligibleTaskRequiresReadyTaskAndContainer/nil_execute_command_agent_status\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer/nil_execute_command_agent_status (0.00s)\n--- FAIL: TestEligibleTaskRequiresReadyTaskAndContainer (0.00s)\npanic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]\n[signal SIGSEGV: segmentation violation code=0x2 addr=0x0 pc=0x1026b4548]\n\ngoroutine 9 [running]:\ntesting.tRunner.func1.2({0x102948500, 0x1029ce5d0})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2125 +0x1a0\ntesting.tRunner.func1()\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2128 +0x2c8\npanic({0x102948500?, 0x1029ce5d0?})\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/runtime/panic.go:859 +0x120\ngithub.com/wim-web/tnnl/internal/target.hasRunningExecuteCommandAgent(...)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:41\ngithub.com/wim-web/tnnl/internal/target.EligibleContainers({{0x0, 0x0, 0x0}, {0x0, 0x0, 0x0}, 0x0, 0x0, 0x0, {0x0, ...}, ...})\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:25 +0x278\ngithub.com/wim-web/tnnl/internal/target.IsEligibleTask(...)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility.go:35\ngithub.com/wim-web/tnnl/internal/target.TestEligibleTaskRequiresReadyTaskAndContainer.func18(0x57a391a26b48)\n\t/Users/wim/program/ghq/github.com/wim-web/tnnl/internal/target/eligibility_test.go:134 +0x10c\ntesting.tRunner(0x57a391a26b48, 0x57a391b46a20)\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2195 +0xc4\ncreated by testing.(*T).Run in goroutine 8\n\t/Users/wim/.local/share/aquaproj-aqua/pkgs/http/golang.org/dl/go1.27.3.darwin-arm64.tar.gz/go/src/testing/testing.go:2260 +0x3b8\nFAIL\tgithub.com/wim-web/tnnl/internal/target\t0.360s\n",
+            "stderr": ""
+          }
+        ]
+      },
+      "q10": {
+        "changes": [
+          {
+            "audit_id": "Q10",
+            "action": "公開Preflightを実PATH/実helperで試験し、継承出力pipeで取消後も終了待ちする不具合を修正",
+            "reason": "新しい起動同期付きの実process試験は修正前に1秒でFAIL。public factoryでexec.Cmd.WaitDelay=200msを設定し、既存3秒preflight timeoutとerror causeを維持。private fakeのdeadline/cancel2試験と成功matrixを実processへ置換し、内部3秒timeoutも独立caseで保持。"
+          }
+        ],
+        "tests": [
+          {
+            "file": "internal/session_manager/session_test.go",
+            "name": "TestPreflightDeadlineIsDiscoverable",
+            "protects": "public Preflightが実plugin helperの起動後、親の実deadlineまたは本番3秒timeoutをcontext.DeadlineExceededとして返し、stdout/stderrを継承する子孫が生きていても終了する。process ExitErrorと操作文脈も保持。",
+            "production_path": "Preflight → exec.LookPath → exec.CommandContext(--version) → CombinedOutput → context timeout / WaitDelay",
+            "rationale": "fakeの協調終了を使わず、helperの子孫が出力pipeを継承したmarkerで同期。親deadline caseは期限到達後1秒、内部timeout caseは起動同期後4秒を独立上限とし、終了待ちの欠落を局所FAILにする。",
+            "action": "Q10対応完了。WaitDelay=0、preflight timeout=30秒の各変異を検出。",
+            "case_notes": "caller deadline / preflight timeout の2case。子孫はrelease fileで終了し、独立10秒上限とcleanup待ちを備える。"
+          },
+          {
+            "file": "internal/session_manager/session_test.go",
+            "name": "TestPreflightParentCancellationIsDiscoverable",
+            "protects": "public Preflightの実process起動と子孫pipe継承後のcaller cancelがcontext.Canceledとして戻り、実ExitErrorと操作文脈を保持して1秒以内に終了する。",
+            "production_path": "Preflight → exec.LookPath → exec.CommandContext(--version) → CombinedOutput → caller cancel / WaitDelay",
+            "rationale": "修正前はpipe-holder終了までCombinedOutputが戻らず1秒上限でFAIL。子孫を存続させたまま呼出が戻ることを確認し、最後にrelease fileでcleanup。",
+            "action": "Q10対応完了。public factoryのWaitDelay=200msで終了を制限。",
+            "case_notes": "サブケースなし。markerで実起動とpipe継承を同期してからcancel。"
+          },
+          {
+            "file": "internal/session_manager/session_test.go",
+            "name": "TestPreflightSuccessUsesExactVersionCommandAndEnvironment",
+            "protects": "本番名session-manager-pluginを専用PATHから発見し、実processへ--versionとAWS環境変数を渡す。primary/fallback/emptyの選択結果を返却Runnerへ保持。",
+            "production_path": "Preflight → exec.LookPath → exec.CommandContext(--version) → CombinedOutput → Runner construction",
+            "rationale": "private dependenciesのfakeを廃止。test executableを独立literal名でsymlinkし、helperが保存した実argv/envと返却Runnerを独立期待値と比較。PATHはfixture専用なので実インストール済みpluginを呼ばない。",
+            "action": "Q10対応完了。既存3caseを実process経路へ移植。",
+            "case_notes": "service-specific values win / fallback values are used / unset values stay empty。helperのrace exit sleepのみ無効化し、終了遅延の無関係な揺れを除外。"
+          }
+        ],
+        "validation": [
+          {
+            "command": "go test -race -count=1 ./internal/session_manager",
+            "exit_code": 0,
+            "output": "ok  \tgithub.com/wim-web/tnnl/internal/session_manager\t8.035s\n"
+          },
+          {
+            "command": "gofmt -w internal/session_manager/session.go internal/session_manager/session_test.go",
+            "exit_code": 0
+          }
+        ],
+        "mutations": [
+          {
+            "id": "Q10-WaitDelay",
+            "command": "go test -race -count=1 -overlay=/tmp/Q10-WaitDelay-overlay.json -run ^TestPreflightParentCancellationIsDiscoverable$ ./internal/session_manager",
+            "exit_code": 1,
+            "output": "--- FAIL: TestPreflightParentCancellationIsDiscoverable (1.04s)\n    session_test.go:289: Preflight waited for inherited output pipes beyond 1s result limit\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/internal/session_manager\t1.449s\nFAIL\n",
+            "edits": {
+              "internal/session_manager/session.go": [
+                "cmd.WaitDelay = preflightWaitDelay",
+                "cmd.WaitDelay = 0"
+              ]
+            },
+            "detected": true
+          },
+          {
+            "id": "Q10-PreflightTimeout",
+            "command": "go test -race -count=1 -overlay=/tmp/Q10-PreflightTimeout-overlay.json -run ^TestPreflightDeadlineIsDiscoverable/preflight_timeout$ ./internal/session_manager",
+            "exit_code": 1,
+            "output": "--- FAIL: TestPreflightDeadlineIsDiscoverable (4.04s)\n    --- FAIL: TestPreflightDeadlineIsDiscoverable/preflight_timeout (4.04s)\n        session_test.go:282: Preflight waited for inherited output pipes beyond 4s result limit\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/internal/session_manager\t4.409s\nFAIL\n",
+            "edits": {
+              "internal/session_manager/session.go": [
+                "preflightLimit: 3 * time.Second",
+                "preflightLimit: 30 * time.Second"
+              ]
+            },
+            "detected": true
+          }
+        ],
+        "before_fix": {
+          "command": "go test -count=1 -run ^TestPreflightParentCancellationIsDiscoverable$ ./internal/session_manager",
+          "exit_code": 1,
+          "output": "--- FAIL: TestPreflightParentCancellationIsDiscoverable (1.03s)\n    session_test.go:282: Preflight waited for inherited output pipes more than 1s after caller context ended\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/internal/session_manager\t1.396s\nFAIL\n"
+        },
+        "production_fix": {
+          "file": "internal/session_manager/session.go",
+          "change": "preflightWaitDelay=200ms; public command factory assigns cmd.WaitDelay before CombinedOutput",
+          "scope": "preflight --version process only; interactive Runner.Run unchanged"
+        }
+      },
+      "q1213": {
+        "changes": [
+          {
+            "audit_id": "Q12",
+            "action": "valid ID fixtureへ移行",
+            "reason": "元ctx/Cause保証を維持し本番と同じcleanup経路を通す"
+          },
+          {
+            "audit_id": "Q13",
+            "action": "独立watchdog追加",
+            "reason": "期限欠落回帰でhangせず1秒で局所FAILする"
+          }
+        ],
+        "tests": [
+          {
+            "file": "pkg/command/session_test.go",
+            "name": "TestRemoteSessionPassesOriginalContextToPlugin",
+            "protects": "元ctxの同一性・Value・取消Cause・Invocationをpluginへ保持し、plugin失敗後は有効session IDを1回cleanupする。",
+            "production_path": "RemoteSession.Run → plugin.Run → cleanupCreatedSession",
+            "rationale": "空IDの便宜fixtureを有効IDへ修正。ctx/Causeの独立assertionを維持し、正常cleanup callbackで本番constructor後の状態を再現する。",
+            "action": "Q12対応完了。WithoutCancel変異を検出。",
+            "case_notes": "単一case。有効ID s-1、caller取消、plugin失敗、cleanup1回を確認。"
+          },
+          {
+            "file": "pkg/command/session_test.go",
+            "name": "TestRemoteSessionCleanupTimeoutIsDiscoverable",
+            "protects": "cleanupの20ms期限がerror chainに残り、期限付与が欠落しても独立watchdogで局所的にFAILする。",
+            "production_path": "RemoteSession.Run → cleanupCreatedSession → terminate",
+            "rationale": "検査対象ctx.Doneだけに依存せず1秒timerを持つ。deadline除去変異はwatchdog由来のFAILとなり全体test timeoutへ到達しない。",
+            "action": "Q13対応完了。deadline除去変異でwatchdogの失敗診断を確認。",
+            "case_notes": "単一case。通常20msの期限、独立watchdog1秒。"
+          }
+        ],
+        "validation": [
+          {
+            "command": "go test -count=1 ./pkg/command -run 'TestRemoteSession(CleanupTimeoutIsDiscoverable|PassesOriginalContextToPlugin)$'",
+            "exit_code": 0
+          }
+        ],
+        "mutations": [
+          {
+            "audit_id": "Q12",
+            "title": "plugin loses caller context",
+            "file": "pkg/command/session.go",
+            "before": "if err := plugin.Run(ctx, s.Invocation); err != nil {",
+            "after": "if err := plugin.Run(context.WithoutCancel(ctx), s.Invocation); err != nil {",
+            "command": "go test -count=1 -json -timeout=10s -overlay=<isolated overlay> -run=^TestRemoteSessionPassesOriginalContextToPlugin$ ./pkg/command",
+            "exit_code": 1,
+            "failed_tests": [
+              "TestRemoteSessionPassesOriginalContextToPlugin"
+            ],
+            "elapsed_seconds": 0.84,
+            "output": "=== RUN   TestRemoteSessionPassesOriginalContextToPlugin\n    session_test.go:216: plugin context = context.Background.WithValue(command.pluginContextKey, plugin-value).WithCancel.WithoutCancel, want original context context.Background.WithValue(command.pluginContextKey, plugin-value).WithCancel\n--- FAIL: TestRemoteSessionPassesOriginalContextToPlugin (0.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/pkg/command\t0.388s\n",
+            "detected": true
+          },
+          {
+            "audit_id": "Q13",
+            "title": "cleanup deadline removed",
+            "file": "pkg/command/session.go",
+            "before": "cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)",
+            "after": "cleanupCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))",
+            "command": "go test -count=1 -json -timeout=10s -overlay=<isolated overlay> -run=^TestRemoteSessionCleanupTimeoutIsDiscoverable$ ./pkg/command",
+            "exit_code": 1,
+            "failed_tests": [
+              "TestRemoteSessionCleanupTimeoutIsDiscoverable"
+            ],
+            "elapsed_seconds": 1.848,
+            "output": "=== RUN   TestRemoteSessionCleanupTimeoutIsDiscoverable\n    session_test.go:188: cleanup context did not expire before the independent watchdog\n--- FAIL: TestRemoteSessionCleanupTimeoutIsDiscoverable (1.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/pkg/command\t1.379s\n",
+            "detected": true
+          }
+        ]
+      }
+    },
+    "additional_mutations_detected": 18
+  },
+  "production_fixes": [
+    {
+      "audit_id": "Q08",
+      "file": "cmd/update/update.go",
+      "change": "Match exact go-build directory or go-build plus decimal suffix; do not redirect installed go-builder/go-build-tools/go-build123extra paths to another PATH binary."
+    },
+    {
+      "audit_id": "Q10",
+      "file": "internal/session_manager/session.go",
+      "change": "Set exec.Cmd.WaitDelay to 200ms so inherited descendant output pipes cannot indefinitely delay Preflight after cancellation or the three-second timeout."
+    }
+  ],
+  "source_sha256": {
+    "cmd/exec/exec.go": "dfc276d4a743f34a981c66c8f3ff136ef97ed9d445dede783f03d2f5b5b4a190",
+    "cmd/exec/exec_test.go": "dafd3a3ce280a313541ce06e66b28a818a39c66136baff16b43279cb4a7f6be4",
+    "cmd/exec/make_input_file.go": "546dcc14f512397c101b0c78db84009eeee382aca1a5b53491f4e22aa88c7f2e",
+    "cmd/inputfile/make.go": "cc40619c6cb1600bd42dbb8dd44bcf78eaf19ead45839cf0cb53c6c31994899a",
+    "cmd/inputfile/make_test.go": "26222106d68e10c4e24c8b8b793246b409c360d57f8e5be7ed6be5f69fc8f81c",
+    "cmd/portforward/make_input_file.go": "9034ba9c8f4f962a1aeb6592377a13466f98a2239ee2c586268dddddd9513b4b",
+    "cmd/portforward/portforward.go": "9483334f16ed751929793f869da3b986c097890ec099ab21a4e10d1153b1c5f4",
+    "cmd/portforward/portforward_test.go": "83c2239ce34c58fff9e1dacf11e8a02fc52d1c45156f85e18feef00aaf18c09a",
+    "cmd/remoteportforward/make_input_file.go": "8fb0b5557fd775cfaf74db166faa4858ed8d2d5285a247356972bd579cd5d75d",
+    "cmd/remoteportforward/remoteportforward.go": "06c52dc3d5c5ed03d292af4a7174858618b6a20b42318af82315d629fed9fa91",
+    "cmd/remoteportforward/remoteportforward_test.go": "e9bd095c2046cfcf7f30d10e0c095e8341943a7b1ceb0bd54a9868cf7f64fd99",
+    "cmd/root.go": "c1063d690837dc57b67881d7e110c9ac88652aeb397a7a03fc26e3e2fa271df3",
+    "cmd/root_test.go": "b2d153021fd274bba7f71470cae8ff90bf8d32e71e8c5c4b54239acb94cd6378",
+    "cmd/update/install.go": "253e5c5b3cf5b31c7090881c5915f022840bbd6954e0b8332b3e459a0aecb428",
+    "cmd/update/install_test.go": "c2d92facbf6fa3fd46a7aa2c83133e781cd200db3f0778bfb439112d497cf1d4",
+    "cmd/update/orchestration_test.go": "b113a9aabfa6eb1e5044d373e7e8d2fa45c35b06beffecc66430de8e7f86a89e",
+    "cmd/update/path_test.go": "08c513d87bd8873efa18853f514ca2fa7256e601afc5e8e832f84cffa1249e87",
+    "cmd/update/release.go": "761f0faa276267847dec178aff485f32a52b0a18c29b4143b8347f32fad60822",
+    "cmd/update/release_test.go": "3e877dced2208cd15949db235a3447198b18a3fd648bcf4da8b94aad65dc2e9f",
+    "cmd/update/update.go": "6c12369d5bf697f5e72bf2003de162a336faf9c964451f778b1711114e6f4646",
+    "cmd/update/update_test.go": "a6649164db2d3e22b8fe3acf3a27e20157e82dfe56a960efed6f0185e50a499b",
+    "internal/buildinfo/version.go": "32861e7762bf7c7c6cbb8c51130f70cba8333c51f8650b5dc3a6e84f92b77211",
+    "internal/buildinfo/version_test.go": "156be4e01c4c050744b4c0b5ff336586a613fe3eaa00f05649aca449e31a10a7",
+    "internal/handler/dependencies.go": "fab77dbb9f5ce853a7262f0595371471e942894c07dfc31dd7cdf65e61d45022",
+    "internal/handler/exec.go": "55d95a67063f5bca7fa4d2c49c4cd12e1e9f7e48dcd649f2a98172fe6543dae3",
+    "internal/handler/exec_test.go": "f62788927e692b05a84f5f34c3721ec9a9d09ee0351efee672808ed83716df75",
+    "internal/handler/portforward.go": "e2e367cd200790e6840c2b86408246ae5d3a268135ab5ebcb33d734c72450c1c",
+    "internal/handler/portforward_test.go": "42d61e8c9619f7dffc663e17a04a7b25589d559a0e4acffd00755f89c770d7ec",
+    "internal/input/func.go": "75635dc2b9469c8ad64414435f3818f2ce18707831795ca2df9e029185d88c8f",
+    "internal/input/func_test.go": "2bbac7750b16b5cbde56be6133a43414ab8ec9af87bb3ed1730574791a376419",
+    "internal/input/input.go": "09decfb371b26fbca208da17d2f758cd1266a8e6b59e73453078c51952f08329",
+    "internal/input/resolve.go": "661e52f99f899da633126845a0db6e844ea585a03a9450362861315c7c2b166b",
+    "internal/input/resolve_test.go": "8abf1187d070609cd875cee359bf43a907185f304a20709d12689edb09f7b19f",
+    "internal/input/validate.go": "badddc795768a1e72e0bbd4449fe83c966032b01403d26ec8030b6dc41780baf",
+    "internal/input/validate_test.go": "7978daf3e6cc8e975b6077fb8ebe7d0ae9a76f48f2fcc7688e1c2632abfcba9f",
+    "internal/listview/simple.go": "39a31445ecec04a3c2abf2d3523a445f95f22adf20465627f8fb792fdd41f389",
+    "internal/listview/simple_test.go": "e834a09f604b6d6554ef9448a78d5e5ee69adf8467aca3b8f88f7d5ad340c8a9",
+    "internal/session_manager/session.go": "f953a0b8057498c04445418c41d0aa7b724ea4f4bc140ee164a23dc21e41948f",
+    "internal/session_manager/session_test.go": "e32caced252854da9ab62b4daff406372600c1a257777b7fa6b56881e8295835",
+    "internal/target/eligibility.go": "136a5e92f9583cef5ddff1ea214c3690978433e82d91fdfe9254cde735ec783f",
+    "internal/target/eligibility_test.go": "7bb6c4faabd13ac3fab7d65b6d799a559eccdc5ac324c7bca7886f8336aaa356",
+    "internal/target/identifier.go": "537e128164c5eb89ba93de08f5cf4406e5046b82e4cab5b5c135bcdbe009ea68",
+    "internal/target/identifier_test.go": "1c0075a3401fa3357064068206100c9cb94f9deb94ab20d58a9d0af7161914b9",
+    "internal/target/resolved.go": "a4d22355bab6d5a75a08c6ebb5f1b7a307d8f263e646ddbdfcd232151111c013",
+    "internal/target/resolver.go": "365e29458cea88dfbf292fff88ea277972e53462ecb1518e56a660c75fbaffae",
+    "internal/target/resolver_test.go": "fe065689af6a2fa62a429b680bfac4833f33c4bdc130424ea9313fa64e564b81",
+    "internal/target/wait.go": "a64dbf4c615dbe61be1517ff7e833fe8eb20709ad0d6a449be538cdb80308644",
+    "internal/target/wait_test.go": "bf596452bc46a2124b46c4412d06a995e9d73cc1183b9757663afc2313c21da8",
+    "internal/view/resolve.go": "9a053b1d06e0df6903d0771326f2baef14e360dc22fadc95fc64bc8e82d188e7",
+    "internal/view/resolve_test.go": "80f0fdfb46032afce08d3535863f5aab64f710826bdc5bd5c3748552b9a8e374",
+    "main.go": "520357a0c5ea5a374544d4dd72a39be42cbe085897e5af589db269c8fc5a7cfd",
+    "main_test.go": "a7a63e5d17c9a9138d2591da024b8a92a030a90bd199d0aa53565c211ea1dc3b",
+    "pkg/command/exec.go": "77e9d808d02d25781c922cfdf669ce06c082414960fa1b080a0aa54e18464271",
+    "pkg/command/exec_test.go": "261ced2f8e1ce41a736ef777c98a4f706c39b9b9714b32b12c3c0bcc348a9d5e",
+    "pkg/command/portforward.go": "eb5f64fafa70bcda246d1b695932187bdfc46e357526bede58ad9ace77697fa5",
+    "pkg/command/portforward_test.go": "4221ac0863c1b70e21bde48c05b93a4857c9cfa377912249d7b0dc5bb1f2f336",
+    "pkg/command/session.go": "d309680835065b4082d502da4281c0f43c54960b0a682d152fbcca1a73ebab76",
+    "pkg/command/session_test.go": "764d1ef4a18cbb9d6f6f7b5234191d73c7513f9fc7f50688c7496c39ac33a97c",
+    "pkg/port/available.go": "a346213ceb7bd4747dc1161c867b2e0774d098b7288de06eb9f31729eff76ee7",
+    "pkg/port/available_test.go": "b40b0759c7f279d4f2379e5a3e2393b618cf71402598a974f125be7876d76207"
+  },
+  "implementation": {
+    "completed": [
+      "LV01",
+      "LV02",
+      "LV03",
+      "LV04",
+      "LV05",
+      "LV06",
+      "LV07",
+      "LV08",
+      "LV09",
+      "LV10",
+      "LV11",
+      "LV12",
+      "LV13",
+      "Q01",
+      "Q02",
+      "Q03",
+      "Q04",
+      "Q05",
+      "Q06",
+      "Q07",
+      "Q08",
+      "Q09",
+      "Q10",
+      "Q11",
+      "Q12",
+      "Q13"
+    ],
+    "pending": [],
+    "changes": [
+      {
+        "audit_id": "LV01",
+        "action": "統合完了",
+        "removed_tests": [
+          "TestResolveTargetRejectsMalformedMetadata/container name",
+          "TestResolveTargetRejectsMalformedMetadata/container runtime ID"
+        ],
+        "retained_or_replacement": [
+          "TestResolveTargetRejectsEmptyResourcesBeforeChooser/resolver violates eligibility contract",
+          "TestResolveTargetRejectsMalformedMetadata/input cluster",
+          "TestResolveTargetRejectsMalformedMetadata/listed cluster",
+          "TestResolveTargetRejectsMalformedMetadata/task ARN"
+        ],
+        "reason": "container欠損2caseはいずれもEligibleContainersで除外され空候補guardに到達するため代表1caseへ統合。cluster/task ARNの固有検証は残した。"
+      },
+      {
+        "audit_id": "LV02",
+        "action": "置換・統合完了",
+        "removed_tests": [
+          "TestResolveTargetRejectsEmptyResourcesBeforeChooser/no eligible tasks",
+          "TestResolveTargetRejectsEmptyResourcesBeforeChooser/no eligible containers"
+        ],
+        "retained_or_replacement": [
+          "TestResolveTargetRejectsEmptyResourcesBeforeChooser/no clusters",
+          "TestResolveTargetRejectsEmptyResourcesBeforeChooser/wait reports no eligible tasks",
+          "TestResolveTargetRejectsEmptyResourcesBeforeChooser/resolver violates eligibility contract"
+        ],
+        "reason": "本番Waitは適格taskなしをerrorとして返すため、そのcause/cluster文脈/zero result/chooser未呼出を確認するcaseへ置換。空候補guardは空clusterと契約外のempty container代表で維持。taskとcontainerの両方で同じchooseOptionの空候補guardを呼ぶため、空task成功fakeの専用caseは削除可能。"
+      },
+      {
+        "audit_id": "LV03",
+        "action": "統合完了",
+        "removed_tests": [
+          "TestResolveTargetChooserErrorWinsOverCancellation",
+          "TestResolveTargetPropagatesChooserError"
+        ],
+        "retained_or_replacement": [
+          "TestResolveTargetPropagatesChooserErrors/cluster chooser",
+          "TestResolveTargetPropagatesChooserErrors/task chooser",
+          "TestResolveTargetPropagatesChooserErrors/container chooser",
+          "TestResolveTargetPropagatesChooserErrors/error wins over simultaneous quit"
+        ],
+        "reason": "本番形式quit=false+errorを全3段階で確認。quit/error競合はcluster代表1件。errors.Is、resource文脈、zero result、quit=false、chooser1回、resolver後続呼出停止を全caseで確認。"
+      },
+      {
+        "audit_id": "LV04",
+        "action": "統合完了",
+        "removed_tests": [
+          "TestTaskOptionsPreserveExactTaskIdentity",
+          "TestTaskOptionsUsesFallbackLabelAndRejectsMalformedARN"
+        ],
+        "retained_or_replacement": [
+          "TestResolveTargetSelectsExactReadyTaskARN",
+          "TestResolveTargetRejectsMalformedMetadata/task ARN",
+          "TestTaskOptionsUsesFallbackLabel"
+        ],
+        "reason": "groupを含むlabel完全一致とfull ARNを上位成功testへ移植。不正task ARNは上位metadata testへ統合。blank groupのfallbackは独立の1testとして維持。"
+      },
+      {
+        "audit_id": "LV05",
+        "action": "assertion削除完了",
+        "removed_tests": [
+          "TestItemFilterValueUsesLabelAndRetainsValue (renamed; only self-assignment Value assertion removed)"
+        ],
+        "retained_or_replacement": [
+          "TestItemFilterValueUsesLabel"
+        ],
+        "reason": "テスト自身のstruct代入を読むだけのValue比較を削除。実FilterValueがLabelを返す契約を維持。"
+      },
+      {
+        "audit_id": "LV06",
+        "action": "統合",
+        "removed_tests": [
+          "TestNewUsesParentSpecificDescription/portforward",
+          "TestNewUsesParentSpecificDescription/remoteportforward"
+        ],
+        "retained_or_replacement": [
+          "TestNewUsesParentSpecificDescription（exec代表1件）",
+          "main_test.goの実登録・テンプレート試験（親担当）"
+        ],
+        "reason": "factoryの同一文字列展開を3回試す重複を削減。実3登録の引数/default/schemaは本番binary試験へ移す。"
+      },
+      {
+        "audit_id": "LV07",
+        "action": "統合",
+        "removed_tests": [
+          "TestPortforwardCommandInputFileHelpNamesParent",
+          "TestRemotePortforwardCommandInputFileHelpNamesParent"
+        ],
+        "retained_or_replacement": [
+          "TestPortforwardHelpDocumentsInputAndAutomaticLocalPort",
+          "TestRemotePortforwardHelpDocumentsRemoteHostAndAutomaticLocalPort"
+        ],
+        "reason": "flag固有Usageのassertionを描画help試験へ移植。同じgenerator文字列のhelp出力側での再比較を削除し、それ以外の説明契約は維持。"
+      },
+      {
+        "audit_id": "LV08",
+        "action": "削除",
+        "removed_tests": [
+          "TestValidatePortForwardJoinsTargetAndLocalErrors"
+        ],
+        "retained_or_replacement": [
+          "TestResolvePortForwardReturnsZeroValueOnValidationError"
+        ],
+        "reason": "同じabc/0入力、両error断片の確認を実validatorを通すresolver試験が維持。Execの直接whitespace受理試験は変更せず維持。"
+      },
+      {
+        "audit_id": "Q02/M02",
+        "action": "強化",
+        "removed_tests": [],
+        "retained_or_replacement": [
+          "TestMakeInputFileRefusesExistingFileUnlessForced",
+          "TestNewForceReplacesExistingFile"
+        ],
+        "reason": "旧fileを新JSONより長い有効JSONにし、縮小fixture条件をassert。期待bytes/length、strict JSON読み込みと値を確認してO_TRUNC欠落による末尾残存を検出する。"
+      },
+      {
+        "audit_id": "Q03/M03",
+        "action": "強化",
+        "removed_tests": [],
+        "retained_or_replacement": [
+          "TestExecCommandPassesExecuteContextToRunner",
+          "TestPortforwardCommandPassesExecuteContextToRunner",
+          "TestRemotePortforwardCommandPassesExecuteContextToRunner"
+        ],
+        "reason": "既存Valueに加えdeadlineをそのまま受け取ること、caller cancel後にrunnerの受信contextがCanceledになることを実Cobra経路で確認。WithoutCancelによる期限/取消喪失を検出。時計待ちはなくcancelは同期的。"
+      },
+      {
+        "audit_id": "Q01/M01",
+        "action": "実Resolverでready/unready混在Describe応答を検証するテストを追加",
+        "removed_tests": [],
+        "retained_or_replacement": [
+          "TestResolverEligibleTasksFiltersUnreadyDescribeResults"
+        ],
+        "reason": "task停止・exec無効・agent未ready・runtime欠損を除外し、2件のready taskを元順序・完全値で返す。期待値はpredicateを再使用せず明示。"
+      },
+      {
+        "audit_id": "LV12",
+        "action": "低価値のfake入力破壊テストを削除",
+        "removed_tests": [
+          "TestResolverDescribeTaskBatchesUseIndependentSlices"
+        ],
+        "retained_or_replacement": [
+          "TestResolverEligibleTasksChunksDescribeRequestsAndPreservesResponseOrder"
+        ],
+        "reason": "現在の本番SDK経路を対象とし、任意clientが入力sliceをappendする破壊耐性を独立したテスト契約としない。100/100/1分割と内容・順序の保証、入力copyの本番実装は維持。"
+      },
+      {
+        "audit_id": "LV13",
+        "action": "errors.Join内部のUnwrap型・子error数assertionを削除",
+        "removed_tests": [],
+        "retained_or_replacement": [
+          "TestResolverEligibleTasksReturnsJoinedDescribeFailures"
+        ],
+        "reason": "2 failureの全文とpartial taskを返さない検証は維持。内部error木の形のみを固定するassertionを削除。"
+      },
+      {
+        "audit_id": "LV09",
+        "action": "統合完了",
+        "removed_tests": [
+          "cmd/update/update_test.go:TestNormalizeVersion",
+          "cmd/update/update_test.go:TestAssetURL"
+        ],
+        "retained_or_replacement": [
+          "cmd/update/install_test.go:TestVerifyCandidateVersion/matches unprefixed candidate to prefixed release",
+          "cmd/update/install_test.go:TestVerifyCandidateVersion/matches prefixed candidate to unprefixed release",
+          "cmd/update/install_test.go:TestVerifyCandidateVersion/normalizes surrounding whitespace",
+          "cmd/update/install_test.go:TestVerifyCandidateVersion/rejects mismatched version with canonical values",
+          "cmd/update/orchestration_test.go:TestUpdaterInstallsOnlyAfterVerification"
+        ],
+        "reason": "先頭v・前後空白・非prefixedの受理は実候補プロセスを通る既存3ケースが保護し、canonical具体値はmismatch errorのassertionも保護。通常asset URL結合は実HTTP request pathをarchive/manifest双方について照合する。単体2関数・4leafを削除。"
+      },
+      {
+        "audit_id": "Q04/M04",
+        "action": "テスト強化完了",
+        "removed_tests": [],
+        "retained_or_replacement": [
+          "internal/handler/portforward_test.go:TestPortForwardHandlerSelectsSecondReplicaAndAllocatesLocalPort",
+          "internal/handler/portforward_test.go:TestRemotePortForwardHandlerBuildsExactParameters"
+        ],
+        "reason": "document expectedを本番command定数から独立literalへ変更。選択・context・parameters・plugin順序など他assertionは維持。変異検証は親が実施。"
+      },
+      {
+        "audit_id": "LV06",
+        "action": "実バイナリから3親のmake-input-fileを実行し登録・help・既定ファイル名・全JSON keys/default値を検証",
+        "removed_tests": [],
+        "retained_or_replacement": [
+          "TestCLIBinaryContracts/registered_input_templates"
+        ],
+        "reason": "factoryへテスト自身が正しい引数を渡す試験を、本番mainのblank importとinit登録を含む経路へ移植"
+      },
+      {
+        "audit_id": "Q05/M05",
+        "action": "dev環境で同じhelperを再比較するテストを削除し、既知linker版の実バイナリversion/--version/-vへ置換",
+        "removed_tests": [
+          "TestVersionDefaultsToBuildInfo"
+        ],
+        "retained_or_replacement": [
+          "TestCLIBinaryContracts/linker_version"
+        ],
+        "reason": "期待値は本番buildinfo関数から作らず1.2.3を独立指定。既定devへの退行を検出"
+      },
+      {
+        "audit_id": "LV10",
+        "action": "Silence boolの直接比較と出力相互比較のみを削除",
+        "removed_tests": [],
+        "retained_or_replacement": [
+          "TestExecuteContextReturnsChildErrorSilently",
+          "TestRootCommandMetadataAndFlags",
+          "TestVersionCommandsWriteIdenticalOutput",
+          "TestVersionCommandsReturnWriteErrors"
+        ],
+        "reason": "実エラー出力、version固定期待値、-v/不要flag、writer errorの固有保証は維持"
+      },
+      {
+        "audit_id": "LV11",
+        "action": "vv/V/linker(devel)/module vvの特殊値4ケースを削除",
+        "removed_tests": [
+          "TestResolveVersion/only_one_leading_lowercase_v_is_removed",
+          "TestResolveVersion/uppercase_V_is_preserved",
+          "TestResolveVersion/linker_devel_is_accepted",
+          "TestResolveVersion/module_removes_at_most_one_leading_lowercase_v"
+        ],
+        "retained_or_replacement": [
+          "TestResolveVersion",
+          "TestCurrentCanonicalizesLinkerVersion",
+          "TestCLIBinaryContracts/linker_version"
+        ],
+        "reason": "通常release版・module/pseudo版・dev・fallbackを保証範囲とし、非標準入力に対するTrimPrefix一回の癖は固定しない。現在の受容実装や動作を変更したわけではない"
+      },
+      {
+        "audit_id": "Q06",
+        "action": "候補のversion実行時にshell自身の$0を記録し、stage directoryの親をcurrent executableの親と直接比較",
+        "reason": "無効TMPDIRで成功するだけでは任意の別ディレクトリでも通った。実候補pathの観測を加えて隣接stagingを保証。TMPDIR非依存と正常置換の既存検証は維持。"
+      },
+      {
+        "audit_id": "Q11",
+        "action": "writer失敗をalready-latest/updatedの2経路で確認し、updatedではcandidate bytesと0755の更新済みfileを検証",
+        "reason": "status出力の失敗を返す契約と、出力時点で置換が完了している副作用の両方を確認。already-latestでは元file不変も確認。"
+      },
+      {
+        "audit_id": "Q07",
+        "action": "candidate open/copy失敗ケースのcurrentPathを既存の保存対象snapshotへ追加",
+        "reason": "通常の旧実行ファイルについて内容・mode・identityを比較し、他人のtemp/sentinelと自己temp cleanupの保証も維持。create temp/renameの異常target fixtureは通常file保存の証拠として扱わない。"
+      },
+      {
+        "audit_id": "Q08",
+        "action": "実行中binary/PATH/symlinkを使う実resolver試験を追加し、TempDir外go-buildと類似prefixの判定を分離。発見したgo-builder誤選択を最小修正。",
+        "reason": "通常自身・起動symlink・別basename・custom go-build・system temp・PATH symlink・PATH欠落・似たgo-builder directoryを実子processで検証。現行GoはMkdirTemp(...,\"go-build\")＋10進数字を生成。従来の部分文字列判定はgo-builder等を誤認し、別PATH binaryを更新対象にしていた。",
+        "production_change": "cmd/update/update.go shouldUsePathBinaryをdirectory segmentごとのgo-build＋数字判定へ限定。既存exact go-build互換は維持。更新処理自体は実行せず、実ユーザーbinary変更なし。"
+      },
+      {
+        "audit_id": "Q09",
+        "action": "総崩れnilケースを単一nilフィールドの6ケースへ分解し、混在container fixtureの重複nil集合を削除",
+        "reason": "各caseはfullyReadyTaskから対象fieldだけをnilにするため、そのfieldの本番判定へ到達する。既存ready/状態/空文字/agent不在の契約を維持。"
+      },
+      {
+        "audit_id": "Q10",
+        "action": "公開Preflightを実PATH/実helperで試験し、継承出力pipeで取消後も終了待ちする不具合を修正",
+        "reason": "新しい起動同期付きの実process試験は修正前に1秒でFAIL。public factoryでexec.Cmd.WaitDelay=200msを設定し、既存3秒preflight timeoutとerror causeを維持。private fakeのdeadline/cancel2試験と成功matrixを実processへ置換し、内部3秒timeoutも独立caseで保持。"
+      },
+      {
+        "audit_id": "Q12",
+        "action": "valid ID fixtureへ移行",
+        "reason": "元ctx/Cause保証を維持し本番と同じcleanup経路を通す"
+      },
+      {
+        "audit_id": "Q13",
+        "action": "独立watchdog追加",
+        "reason": "期限欠落回帰でhangせず1秒で局所FAILする"
+      }
+    ]
+  },
+  "previous_implementation": {
+    "updated_at": "2026-10-28 Asia/Tokyo",
+    "base_commit": "396f7117ab39552e56f62180e2066786de119bca",
+    "revision": "base commit plus uncommitted test-only changes",
+    "toolchain": "go1.27.3 darwin/arm64 (aqua.yaml pinned)",
+    "inventory": {
+      "go_files": 27,
+      "go_test_functions": 163,
+      "go_runtime_nodes": 419,
+      "go_leaf_cases": 371,
+      "shell_cases": 9,
+      "ci_runtime_assertions": 1,
+      "csv_rows": 381
+    },
+    "baseline": {
+      "command": "go test -race -count=1 -coverprofile=/tmp/tnnl-test-after-coverage.out -json ./...",
+      "exit_code": 0,
+      "leaf_pass": 371,
+      "fail": 0,
+      "skip": 0,
+      "coverage_percent": 84.9,
+      "coverage_note": "package-local instrumentation; zero coverage does not alone prove no cross-package execution"
+    },
+    "other_checks": {
+      "go_vet": "PASS",
+      "gofmt": "PASS",
+      "shell": {
+        "command": "bash script/verify-release-artifacts_test.sh",
+        "exit_code": 0,
+        "output": "release artifact verifier fixture tests passed"
+      }
+    },
+    "mutations": {
+      "method": "Copy current Go source, including main_test.go, with go.mod/go.sum to an isolated temporary directory. Apply each original mutation group independently, run go test -count=1 -json ./..., restore originals before the next group. Require expected tests to fail, not merely a nonzero process exit.",
+      "results": [
+        {
+          "id": "M01",
+          "title": "readiness filter removed",
+          "edits": {
+            "internal/target/resolver.go": [
+              "if IsEligibleTask(task) {",
+              "if true {"
+            ]
+          },
+          "command": "go test -count=1 -json ./...",
+          "exit_code": 1,
+          "expected_failed_tests": [
+            "TestResolverEligibleTasksFiltersUnreadyDescribeResults"
+          ],
+          "failed_tests": [
+            "TestResolverEligibleTasksFiltersUnreadyDescribeResults"
+          ],
+          "detected": true,
+          "output": "    resolver_test.go:315: EligibleTasks() ARNs = []string{\"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000001\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000002\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000003\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000004\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000005\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000006\"}, want only ready tasks []string{\"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000002\", \"arn:aws:ecs:us-east-1:123456789012:task/production/00000000000000000000000000000005\"}\n--- FAIL: TestResolverEligibleTasksFiltersUnreadyDescribeResults (0.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/internal/target\t3.591s\n",
+          "stderr": "",
+          "output_scope": "Failure diagnostics only; successful test progress omitted",
+          "full_jsonl_sha256": "864e2cdd750c0ef60cf48816dbb1fab678d6bae93d60c77dab95c1d36474b49f"
+        },
+        {
+          "id": "M02",
+          "title": "force truncation removed",
+          "edits": {
+            "internal/input/func.go": [
+              "flags |= os.O_TRUNC",
+              "flags |= 0"
+            ]
+          },
+          "command": "go test -count=1 -json ./...",
+          "exit_code": 1,
+          "expected_failed_tests": [
+            "TestMakeInputFileRefusesExistingFileUnlessForced",
+            "TestNewForceReplacesExistingFile"
+          ],
+          "failed_tests": [
+            "TestNewForceReplacesExistingFile",
+            "TestMakeInputFileRefusesExistingFileUnlessForced"
+          ],
+          "detected": true,
+          "output": "    make_test.go:110: replaced file = \"{\\n  \\\"cluster\\\": \\\"\\\",\\n  \\\"service\\\": \\\"\\\",\\n  \\\"target_port_number\\\": \\\"443\\\",\\n  \\\"local_port_number\\\": \\\"8443\\\"\\n}\\nrold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-clusterold-cluster\\\",\\\"target_port_number\\\":\\\"80\\\",\\\"local_port_number\\\":\\\"8080\\\"}\" (419 bytes), want \"{\\n  \\\"cluster\\\": \\\"\\\",\\n  \\\"service\\\": \\\"\\\",\\n  \\\"target_port_number\\\": \\\"443\\\",\\n  \\\"local_port_number\\\": \\\"8443\\\"\\n}\\n\" (99 bytes)\n--- FAIL: TestNewForceReplacesExistingFile (0.01s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/inputfile\t1.376s\n    func_test.go:77: forced file = \"{\\n  \\\"cluster\\\": \\\"\\\",\\n  \\\"service\\\": \\\"\\\",\\n  \\\"command\\\": \\\"bash\\\",\\n  \\\"wait\\\": 0\\n}\\ncommandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-commandold-command\\\"}\" (366 bytes), want \"{\\n  \\\"cluster\\\": \\\"\\\",\\n  \\\"service\\\": \\\"\\\",\\n  \\\"command\\\": \\\"bash\\\",\\n  \\\"wait\\\": 0\\n}\\n\" (71 bytes)\n--- FAIL: TestMakeInputFileRefusesExistingFileUnlessForced (0.01s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/internal/input\t2.974s\n",
+          "stderr": "",
+          "output_scope": "Failure diagnostics only; successful test progress omitted",
+          "full_jsonl_sha256": "9a9a482538e3e5dbc4921847e5703f56ec4d3b482199e3ca57098decff687c16"
+        },
+        {
+          "id": "M03",
+          "title": "CLI contexts lose cancellation",
+          "edits": {
+            "cmd/exec/exec.go": [
+              "return run(cmd.Context(), resolved)",
+              "return run(context.WithoutCancel(cmd.Context()), resolved)"
+            ],
+            "cmd/portforward/portforward.go": [
+              "return run(cmd.Context(), resolved)",
+              "return run(context.WithoutCancel(cmd.Context()), resolved)"
+            ],
+            "cmd/remoteportforward/remoteportforward.go": [
+              "return run(cmd.Context(), resolved)",
+              "return run(context.WithoutCancel(cmd.Context()), resolved)"
+            ]
+          },
+          "command": "go test -count=1 -json ./...",
+          "exit_code": 1,
+          "expected_failed_tests": [
+            "TestExecCommandPassesExecuteContextToRunner",
+            "TestPortforwardCommandPassesExecuteContextToRunner",
+            "TestRemotePortforwardCommandPassesExecuteContextToRunner"
+          ],
+          "failed_tests": [
+            "TestExecCommandPassesExecuteContextToRunner",
+            "TestPortforwardCommandPassesExecuteContextToRunner",
+            "TestRemotePortforwardCommandPassesExecuteContextToRunner"
+          ],
+          "detected": true,
+          "output": "    exec_test.go:85: runner deadline = 0001-01-01 00:00:00 +0000 UTC, false, want 2026-10-28 14:25:40.919094 +0900 JST m=+3600.005514709, true\n--- FAIL: TestExecCommandPassesExecuteContextToRunner (0.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/exec\t0.979s\n    portforward_test.go:122: runner deadline = 0001-01-01 00:00:00 +0000 UTC, false, want 2026-10-28 14:25:41.52678 +0900 JST m=+3600.005040292, true\n--- FAIL: TestPortforwardCommandPassesExecuteContextToRunner (0.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/portforward\t1.567s\n    remoteportforward_test.go:150: runner deadline = 0001-01-01 00:00:00 +0000 UTC, false, want 2026-10-28 14:25:42.23537 +0900 JST m=+3600.006664542, true\n--- FAIL: TestRemotePortforwardCommandPassesExecuteContextToRunner (0.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/cmd/remoteportforward\t2.276s\n",
+          "stderr": "",
+          "output_scope": "Failure diagnostics only; successful test progress omitted",
+          "full_jsonl_sha256": "e4dd032c375aea7e97c6dec656adc787e369b0f78518ac5df34328c56cce3044"
+        },
+        {
+          "id": "M04",
+          "title": "port forwarding document constants changed",
+          "edits": {
+            "pkg/command/portforward.go": [
+              [
+                "\"AWS-StartPortForwardingSession\"",
+                "\"Wrong-PortForwardDocument\""
+              ],
+              [
+                "\"AWS-StartPortForwardingSessionToRemoteHost\"",
+                "\"Wrong-RemotePortForwardDocument\""
+              ]
+            ]
+          },
+          "command": "go test -count=1 -json ./...",
+          "exit_code": 1,
+          "expected_failed_tests": [
+            "TestPortForwardHandlerSelectsSecondReplicaAndAllocatesLocalPort",
+            "TestRemotePortForwardHandlerBuildsExactParameters"
+          ],
+          "failed_tests": [
+            "TestPortForwardHandlerSelectsSecondReplicaAndAllocatesLocalPort",
+            "TestRemotePortForwardHandlerBuildsExactParameters"
+          ],
+          "detected": true,
+          "output": "    portforward_test.go:84: StartSession document = \"Wrong-PortForwardDocument\", want \"AWS-StartPortForwardingSession\"\n--- FAIL: TestPortForwardHandlerSelectsSecondReplicaAndAllocatesLocalPort (0.00s)\n    portforward_test.go:179: document = \"Wrong-RemotePortForwardDocument\", want \"AWS-StartPortForwardingSessionToRemoteHost\"\n--- FAIL: TestRemotePortForwardHandlerBuildsExactParameters (0.00s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl/internal/handler\t2.609s\n",
+          "stderr": "",
+          "output_scope": "Failure diagnostics only; successful test progress omitted",
+          "full_jsonl_sha256": "990801426beb47642d63e6b069faacd68216a3828632e1fc5821f517cb06045e"
+        },
+        {
+          "id": "M05",
+          "title": "cmd.Version hardcoded to dev",
+          "edits": {
+            "cmd/root.go": [
+              [
+                "\"github.com/wim-web/tnnl/internal/buildinfo\"",
+                ""
+              ],
+              [
+                "var Version = buildinfo.Current()",
+                "var Version = \"dev\""
+              ]
+            ]
+          },
+          "command": "go test -count=1 -json ./...",
+          "exit_code": 1,
+          "expected_failed_tests": [
+            "TestCLIBinaryContracts/linker_version/subcommand",
+            "TestCLIBinaryContracts/linker_version/long_flag",
+            "TestCLIBinaryContracts/linker_version/short_flag"
+          ],
+          "failed_tests": [
+            "TestCLIBinaryContracts/linker_version/subcommand",
+            "TestCLIBinaryContracts/linker_version/long_flag",
+            "TestCLIBinaryContracts/linker_version/short_flag",
+            "TestCLIBinaryContracts/linker_version",
+            "TestCLIBinaryContracts"
+          ],
+          "detected": true,
+          "output": "    main_test.go:39: version output = \"dev\\n\", want linker version 1.2.3\n--- FAIL: TestCLIBinaryContracts/linker_version/subcommand (2.51s)\n    main_test.go:39: version output = \"dev\\n\", want linker version 1.2.3\n--- FAIL: TestCLIBinaryContracts/linker_version/long_flag (0.01s)\n    main_test.go:39: version output = \"dev\\n\", want linker version 1.2.3\n--- FAIL: TestCLIBinaryContracts/linker_version/short_flag (0.01s)\n--- FAIL: TestCLIBinaryContracts/linker_version (2.53s)\n--- FAIL: TestCLIBinaryContracts (3.28s)\nFAIL\nFAIL\tgithub.com/wim-web/tnnl\t3.804s\n",
+          "stderr": "",
+          "output_scope": "Failure diagnostics only; successful test progress omitted",
+          "full_jsonl_sha256": "b8582c8ba9d9b22c08977479574042beed33dd3192499842c57bf13e37ed0656"
+        }
+      ]
+    },
+    "test_source_sha256": {
+      "cmd/exec/exec_test.go": "dafd3a3ce280a313541ce06e66b28a818a39c66136baff16b43279cb4a7f6be4",
+      "cmd/inputfile/make_test.go": "26222106d68e10c4e24c8b8b793246b409c360d57f8e5be7ed6be5f69fc8f81c",
+      "cmd/portforward/portforward_test.go": "83c2239ce34c58fff9e1dacf11e8a02fc52d1c45156f85e18feef00aaf18c09a",
+      "cmd/remoteportforward/remoteportforward_test.go": "e9bd095c2046cfcf7f30d10e0c095e8341943a7b1ceb0bd54a9868cf7f64fd99",
+      "cmd/root_test.go": "b2d153021fd274bba7f71470cae8ff90bf8d32e71e8c5c4b54239acb94cd6378",
+      "cmd/update/install_test.go": "303e6013fbe0d460d948c6d0bd38fe35e6c7f4070165edeaa1ba675c1ae3a048",
+      "cmd/update/orchestration_test.go": "f5c45a8e6f34177afaf7a2995c1323f78d8f2318f15a0d1f2e3e6336017cf276",
+      "cmd/update/release_test.go": "3e877dced2208cd15949db235a3447198b18a3fd648bcf4da8b94aad65dc2e9f",
+      "cmd/update/update_test.go": "e7630ad762c7df2abcc96f5843b9432543ef8c698fcbc9c40c4867d5771919b4",
+      "internal/buildinfo/version_test.go": "156be4e01c4c050744b4c0b5ff336586a613fe3eaa00f05649aca449e31a10a7",
+      "internal/handler/exec_test.go": "f62788927e692b05a84f5f34c3721ec9a9d09ee0351efee672808ed83716df75",
+      "internal/handler/portforward_test.go": "42d61e8c9619f7dffc663e17a04a7b25589d559a0e4acffd00755f89c770d7ec",
+      "internal/input/func_test.go": "2bbac7750b16b5cbde56be6133a43414ab8ec9af87bb3ed1730574791a376419",
+      "internal/input/resolve_test.go": "8abf1187d070609cd875cee359bf43a907185f304a20709d12689edb09f7b19f",
+      "internal/input/validate_test.go": "7978daf3e6cc8e975b6077fb8ebe7d0ae9a76f48f2fcc7688e1c2632abfcba9f",
+      "internal/listview/simple_test.go": "e834a09f604b6d6554ef9448a78d5e5ee69adf8467aca3b8f88f7d5ad340c8a9",
+      "internal/session_manager/session_test.go": "7c9e2824c49b61557803a20b3b9a66522ad3db83a537ccb5785ccac115a0fdb8",
+      "internal/target/eligibility_test.go": "ae97a2ce645d6e092835b9a0a57b122598132ce0c03ceb7c1ec6a118d6b1c835",
+      "internal/target/identifier_test.go": "1c0075a3401fa3357064068206100c9cb94f9deb94ab20d58a9d0af7161914b9",
+      "internal/target/resolver_test.go": "fe065689af6a2fa62a429b680bfac4833f33c4bdc130424ea9313fa64e564b81",
+      "internal/target/wait_test.go": "bf596452bc46a2124b46c4412d06a995e9d73cc1183b9757663afc2313c21da8",
+      "internal/view/resolve_test.go": "80f0fdfb46032afce08d3535863f5aab64f710826bdc5bd5c3748552b9a8e374",
+      "main_test.go": "a7a63e5d17c9a9138d2591da024b8a92a030a90bd199d0aa53565c211ea1dc3b",
+      "pkg/command/exec_test.go": "261ced2f8e1ce41a736ef777c98a4f706c39b9b9714b32b12c3c0bcc348a9d5e",
+      "pkg/command/portforward_test.go": "4221ac0863c1b70e21bde48c05b93a4857c9cfa377912249d7b0dc5bb1f2f336",
+      "pkg/command/session_test.go": "b87cf683811cac72ccdb6943813115c05041f6149a8093e1161e2cead157200a",
+      "pkg/port/available_test.go": "b40b0759c7f279d4f2379e5a3e2393b618cf71402598a974f125be7876d76207"
+    },
+    "implementation": {
+      "completed": [
+        "LV01",
+        "LV02",
+        "LV03",
+        "LV04",
+        "LV05",
+        "LV06",
+        "LV07",
+        "LV08",
+        "LV09",
+        "LV10",
+        "LV11",
+        "LV12",
+        "LV13",
+        "Q01",
+        "Q02",
+        "Q03",
+        "Q04",
+        "Q05"
+      ],
+      "pending": [
+        "Q06",
+        "Q07",
+        "Q08",
+        "Q09",
+        "Q10",
+        "Q11",
+        "Q12",
+        "Q13"
+      ],
+      "changes": [
+        {
+          "audit_id": "LV01",
+          "action": "統合完了",
+          "removed_tests": [
+            "TestResolveTargetRejectsMalformedMetadata/container name",
+            "TestResolveTargetRejectsMalformedMetadata/container runtime ID"
+          ],
+          "retained_or_replacement": [
+            "TestResolveTargetRejectsEmptyResourcesBeforeChooser/resolver violates eligibility contract",
+            "TestResolveTargetRejectsMalformedMetadata/input cluster",
+            "TestResolveTargetRejectsMalformedMetadata/listed cluster",
+            "TestResolveTargetRejectsMalformedMetadata/task ARN"
+          ],
+          "reason": "container欠損2caseはいずれもEligibleContainersで除外され空候補guardに到達するため代表1caseへ統合。cluster/task ARNの固有検証は残した。"
+        },
+        {
+          "audit_id": "LV02",
+          "action": "置換・統合完了",
+          "removed_tests": [
+            "TestResolveTargetRejectsEmptyResourcesBeforeChooser/no eligible tasks",
+            "TestResolveTargetRejectsEmptyResourcesBeforeChooser/no eligible containers"
+          ],
+          "retained_or_replacement": [
+            "TestResolveTargetRejectsEmptyResourcesBeforeChooser/no clusters",
+            "TestResolveTargetRejectsEmptyResourcesBeforeChooser/wait reports no eligible tasks",
+            "TestResolveTargetRejectsEmptyResourcesBeforeChooser/resolver violates eligibility contract"
+          ],
+          "reason": "本番Waitは適格taskなしをerrorとして返すため、そのcause/cluster文脈/zero result/chooser未呼出を確認するcaseへ置換。空候補guardは空clusterと契約外のempty container代表で維持。taskとcontainerの両方で同じchooseOptionの空候補guardを呼ぶため、空task成功fakeの専用caseは削除可能。"
+        },
+        {
+          "audit_id": "LV03",
+          "action": "統合完了",
+          "removed_tests": [
+            "TestResolveTargetChooserErrorWinsOverCancellation",
+            "TestResolveTargetPropagatesChooserError"
+          ],
+          "retained_or_replacement": [
+            "TestResolveTargetPropagatesChooserErrors/cluster chooser",
+            "TestResolveTargetPropagatesChooserErrors/task chooser",
+            "TestResolveTargetPropagatesChooserErrors/container chooser",
+            "TestResolveTargetPropagatesChooserErrors/error wins over simultaneous quit"
+          ],
+          "reason": "本番形式quit=false+errorを全3段階で確認。quit/error競合はcluster代表1件。errors.Is、resource文脈、zero result、quit=false、chooser1回、resolver後続呼出停止を全caseで確認。"
+        },
+        {
+          "audit_id": "LV04",
+          "action": "統合完了",
+          "removed_tests": [
+            "TestTaskOptionsPreserveExactTaskIdentity",
+            "TestTaskOptionsUsesFallbackLabelAndRejectsMalformedARN"
+          ],
+          "retained_or_replacement": [
+            "TestResolveTargetSelectsExactReadyTaskARN",
+            "TestResolveTargetRejectsMalformedMetadata/task ARN",
+            "TestTaskOptionsUsesFallbackLabel"
+          ],
+          "reason": "groupを含むlabel完全一致とfull ARNを上位成功testへ移植。不正task ARNは上位metadata testへ統合。blank groupのfallbackは独立の1testとして維持。"
+        },
+        {
+          "audit_id": "LV05",
+          "action": "assertion削除完了",
+          "removed_tests": [
+            "TestItemFilterValueUsesLabelAndRetainsValue (renamed; only self-assignment Value assertion removed)"
+          ],
+          "retained_or_replacement": [
+            "TestItemFilterValueUsesLabel"
+          ],
+          "reason": "テスト自身のstruct代入を読むだけのValue比較を削除。実FilterValueがLabelを返す契約を維持。"
+        },
+        {
+          "audit_id": "LV06",
+          "action": "統合",
+          "removed_tests": [
+            "TestNewUsesParentSpecificDescription/portforward",
+            "TestNewUsesParentSpecificDescription/remoteportforward"
+          ],
+          "retained_or_replacement": [
+            "TestNewUsesParentSpecificDescription（exec代表1件）",
+            "main_test.goの実登録・テンプレート試験（親担当）"
+          ],
+          "reason": "factoryの同一文字列展開を3回試す重複を削減。実3登録の引数/default/schemaは本番binary試験へ移す。"
+        },
+        {
+          "audit_id": "LV07",
+          "action": "統合",
+          "removed_tests": [
+            "TestPortforwardCommandInputFileHelpNamesParent",
+            "TestRemotePortforwardCommandInputFileHelpNamesParent"
+          ],
+          "retained_or_replacement": [
+            "TestPortforwardHelpDocumentsInputAndAutomaticLocalPort",
+            "TestRemotePortforwardHelpDocumentsRemoteHostAndAutomaticLocalPort"
+          ],
+          "reason": "flag固有Usageのassertionを描画help試験へ移植。同じgenerator文字列のhelp出力側での再比較を削除し、それ以外の説明契約は維持。"
+        },
+        {
+          "audit_id": "LV08",
+          "action": "削除",
+          "removed_tests": [
+            "TestValidatePortForwardJoinsTargetAndLocalErrors"
+          ],
+          "retained_or_replacement": [
+            "TestResolvePortForwardReturnsZeroValueOnValidationError"
+          ],
+          "reason": "同じabc/0入力、両error断片の確認を実validatorを通すresolver試験が維持。Execの直接whitespace受理試験は変更せず維持。"
+        },
+        {
+          "audit_id": "Q02/M02",
+          "action": "強化",
+          "removed_tests": [],
+          "retained_or_replacement": [
+            "TestMakeInputFileRefusesExistingFileUnlessForced",
+            "TestNewForceReplacesExistingFile"
+          ],
+          "reason": "旧fileを新JSONより長い有効JSONにし、縮小fixture条件をassert。期待bytes/length、strict JSON読み込みと値を確認してO_TRUNC欠落による末尾残存を検出する。"
+        },
+        {
+          "audit_id": "Q03/M03",
+          "action": "強化",
+          "removed_tests": [],
+          "retained_or_replacement": [
+            "TestExecCommandPassesExecuteContextToRunner",
+            "TestPortforwardCommandPassesExecuteContextToRunner",
+            "TestRemotePortforwardCommandPassesExecuteContextToRunner"
+          ],
+          "reason": "既存Valueに加えdeadlineをそのまま受け取ること、caller cancel後にrunnerの受信contextがCanceledになることを実Cobra経路で確認。WithoutCancelによる期限/取消喪失を検出。時計待ちはなくcancelは同期的。"
+        },
+        {
+          "audit_id": "Q01/M01",
+          "action": "実Resolverでready/unready混在Describe応答を検証するテストを追加",
+          "removed_tests": [],
+          "retained_or_replacement": [
+            "TestResolverEligibleTasksFiltersUnreadyDescribeResults"
+          ],
+          "reason": "task停止・exec無効・agent未ready・runtime欠損を除外し、2件のready taskを元順序・完全値で返す。期待値はpredicateを再使用せず明示。"
+        },
+        {
+          "audit_id": "LV12",
+          "action": "低価値のfake入力破壊テストを削除",
+          "removed_tests": [
+            "TestResolverDescribeTaskBatchesUseIndependentSlices"
+          ],
+          "retained_or_replacement": [
+            "TestResolverEligibleTasksChunksDescribeRequestsAndPreservesResponseOrder"
+          ],
+          "reason": "現在の本番SDK経路を対象とし、任意clientが入力sliceをappendする破壊耐性を独立したテスト契約としない。100/100/1分割と内容・順序の保証、入力copyの本番実装は維持。"
+        },
+        {
+          "audit_id": "LV13",
+          "action": "errors.Join内部のUnwrap型・子error数assertionを削除",
+          "removed_tests": [],
+          "retained_or_replacement": [
+            "TestResolverEligibleTasksReturnsJoinedDescribeFailures"
+          ],
+          "reason": "2 failureの全文とpartial taskを返さない検証は維持。内部error木の形のみを固定するassertionを削除。"
+        },
+        {
+          "audit_id": "LV09",
+          "action": "統合完了",
+          "removed_tests": [
+            "cmd/update/update_test.go:TestNormalizeVersion",
+            "cmd/update/update_test.go:TestAssetURL"
+          ],
+          "retained_or_replacement": [
+            "cmd/update/install_test.go:TestVerifyCandidateVersion/matches unprefixed candidate to prefixed release",
+            "cmd/update/install_test.go:TestVerifyCandidateVersion/matches prefixed candidate to unprefixed release",
+            "cmd/update/install_test.go:TestVerifyCandidateVersion/normalizes surrounding whitespace",
+            "cmd/update/install_test.go:TestVerifyCandidateVersion/rejects mismatched version with canonical values",
+            "cmd/update/orchestration_test.go:TestUpdaterInstallsOnlyAfterVerification"
+          ],
+          "reason": "先頭v・前後空白・非prefixedの受理は実候補プロセスを通る既存3ケースが保護し、canonical具体値はmismatch errorのassertionも保護。通常asset URL結合は実HTTP request pathをarchive/manifest双方について照合する。単体2関数・4leafを削除。"
+        },
+        {
+          "audit_id": "Q04/M04",
+          "action": "テスト強化完了",
+          "removed_tests": [],
+          "retained_or_replacement": [
+            "internal/handler/portforward_test.go:TestPortForwardHandlerSelectsSecondReplicaAndAllocatesLocalPort",
+            "internal/handler/portforward_test.go:TestRemotePortForwardHandlerBuildsExactParameters"
+          ],
+          "reason": "document expectedを本番command定数から独立literalへ変更。選択・context・parameters・plugin順序など他assertionは維持。変異検証は親が実施。"
+        },
+        {
+          "audit_id": "LV06",
+          "action": "実バイナリから3親のmake-input-fileを実行し登録・help・既定ファイル名・全JSON keys/default値を検証",
+          "removed_tests": [],
+          "retained_or_replacement": [
+            "TestCLIBinaryContracts/registered_input_templates"
+          ],
+          "reason": "factoryへテスト自身が正しい引数を渡す試験を、本番mainのblank importとinit登録を含む経路へ移植"
+        },
+        {
+          "audit_id": "Q05/M05",
+          "action": "dev環境で同じhelperを再比較するテストを削除し、既知linker版の実バイナリversion/--version/-vへ置換",
+          "removed_tests": [
+            "TestVersionDefaultsToBuildInfo"
+          ],
+          "retained_or_replacement": [
+            "TestCLIBinaryContracts/linker_version"
+          ],
+          "reason": "期待値は本番buildinfo関数から作らず1.2.3を独立指定。既定devへの退行を検出"
+        },
+        {
+          "audit_id": "LV10",
+          "action": "Silence boolの直接比較と出力相互比較のみを削除",
+          "removed_tests": [],
+          "retained_or_replacement": [
+            "TestExecuteContextReturnsChildErrorSilently",
+            "TestRootCommandMetadataAndFlags",
+            "TestVersionCommandsWriteIdenticalOutput",
+            "TestVersionCommandsReturnWriteErrors"
+          ],
+          "reason": "実エラー出力、version固定期待値、-v/不要flag、writer errorの固有保証は維持"
+        },
+        {
+          "audit_id": "LV11",
+          "action": "vv/V/linker(devel)/module vvの特殊値4ケースを削除",
+          "removed_tests": [
+            "TestResolveVersion/only_one_leading_lowercase_v_is_removed",
+            "TestResolveVersion/uppercase_V_is_preserved",
+            "TestResolveVersion/linker_devel_is_accepted",
+            "TestResolveVersion/module_removes_at_most_one_leading_lowercase_v"
+          ],
+          "retained_or_replacement": [
+            "TestResolveVersion",
+            "TestCurrentCanonicalizesLinkerVersion",
+            "TestCLIBinaryContracts/linker_version"
+          ],
+          "reason": "通常release版・module/pseudo版・dev・fallbackを保証範囲とし、非標準入力に対するTrimPrefix一回の癖は固定しない。現在の受容実装や動作を変更したわけではない"
+        }
+      ]
+    },
+    "initial_audit": {
+      "audit_date": "2026-10-28 Asia/Tokyo",
+      "commit": "396f7117ab39552e56f62180e2066786de119bca",
+      "toolchain": "go1.27.3 darwin/arm64 (aqua.yaml pinned)",
+      "inventory": {
+        "go_files": 26,
+        "go_test_functions": 170,
+        "go_runtime_nodes": 431,
+        "go_leaf_cases": 383,
+        "shell_cases": 9,
+        "ci_runtime_assertions": 1,
+        "csv_rows": 393
+      },
+      "baseline": {
+        "command": "go test -race -count=1 -coverprofile=/tmp/tnnl-test-audit-coverage.out -json ./...",
+        "exit_code": 0,
+        "leaf_pass": 383,
+        "fail": 0,
+        "skip": 0,
+        "coverage_percent": 84.8,
+        "coverage_note": "package-local instrumentation; zero coverage does not alone prove no cross-package execution",
+        "packages": [
+          {
+            "package": "github.com/wim-web/tnnl/cmd",
+            "elapsed": 1.3900000000000001
+          },
+          {
+            "package": "github.com/wim-web/tnnl/cmd/portforward",
+            "elapsed": 1.5
+          },
+          {
+            "package": "github.com/wim-web/tnnl/cmd/exec",
+            "elapsed": 1.944
+          },
+          {
+            "package": "github.com/wim-web/tnnl/cmd/remoteportforward",
+            "elapsed": 2.778
+          },
+          {
+            "package": "github.com/wim-web/tnnl/internal/handler",
+            "elapsed": 3.135
+          },
+          {
+            "package": "github.com/wim-web/tnnl/internal/buildinfo",
+            "elapsed": 3.45
+          },
+          {
+            "package": "github.com/wim-web/tnnl/internal/input",
+            "elapsed": 3.816
+          },
+          {
+            "package": "github.com/wim-web/tnnl/cmd/inputfile",
+            "elapsed": 4.154
+          },
+          {
+            "package": "github.com/wim-web/tnnl/internal/listview",
+            "elapsed": 4.129
+          },
+          {
+            "package": "github.com/wim-web/tnnl/internal/target",
+            "elapsed": 3.918
+          },
+          {
+            "package": "github.com/wim-web/tnnl",
+            "elapsed": 6.868
+          },
+          {
+            "package": "github.com/wim-web/tnnl/internal/view",
+            "elapsed": 3.421
+          },
+          {
+            "package": "github.com/wim-web/tnnl/internal/session_manager",
+            "elapsed": 5.101
+          },
+          {
+            "package": "github.com/wim-web/tnnl/pkg/command",
+            "elapsed": 3.48
+          },
+          {
+            "package": "github.com/wim-web/tnnl/pkg/port",
+            "elapsed": 3.544
+          },
+          {
+            "package": "github.com/wim-web/tnnl/cmd/update",
+            "elapsed": 12.498
+          }
+        ]
+      },
+      "shell": {
+        "command": "bash script/verify-release-artifacts_test.sh",
+        "exit_code": 0,
+        "output": "release artifact verifier fixture tests passed"
+      },
+      "mutations": {
+        "method": "Copy Go source + go.mod/go.sum to an isolated temporary directory. Apply exactly one mutation group per run, run go test -count=1 ./..., then restore baseline before next group. Repository code/tests untouched. No mutation score inferred from these five selected examples.",
+        "results": [
+          {
+            "id": "M01",
+            "title": "readiness filter removed",
+            "exit_code": 0,
+            "edits": {
+              "internal/target/resolver.go": [
+                "if IsEligibleTask(task) {",
+                "if true {"
+              ]
+            },
+            "command": "go test -count=1 ./...",
+            "output": "?   \tgithub.com/wim-web/tnnl\t[no test files]\nok  \tgithub.com/wim-web/tnnl/cmd\t0.433s\nok  \tgithub.com/wim-web/tnnl/cmd/exec\t0.863s\nok  \tgithub.com/wim-web/tnnl/cmd/inputfile\t1.646s\nok  \tgithub.com/wim-web/tnnl/cmd/portforward\t1.278s\nok  \tgithub.com/wim-web/tnnl/cmd/remoteportforward\t2.327s\nok  \tgithub.com/wim-web/tnnl/cmd/update\t12.817s\nok  \tgithub.com/wim-web/tnnl/internal/buildinfo\t2.640s\nok  \tgithub.com/wim-web/tnnl/internal/handler\t2.988s\nok  \tgithub.com/wim-web/tnnl/internal/input\t3.350s\nok  \tgithub.com/wim-web/tnnl/internal/listview\t3.630s\nok  \tgithub.com/wim-web/tnnl/internal/session_manager\t3.639s\nok  \tgithub.com/wim-web/tnnl/internal/target\t3.496s\nok  \tgithub.com/wim-web/tnnl/internal/view\t3.397s\nok  \tgithub.com/wim-web/tnnl/pkg/command\t3.382s\nok  \tgithub.com/wim-web/tnnl/pkg/port\t3.089s\n",
+            "result": "survived"
+          },
+          {
+            "id": "M02",
+            "title": "force truncation removed",
+            "exit_code": 0,
+            "edits": {
+              "internal/input/func.go": [
+                "flags |= os.O_TRUNC",
+                "flags |= 0"
+              ]
+            },
+            "command": "go test -count=1 ./...",
+            "output": "?   \tgithub.com/wim-web/tnnl\t[no test files]\nok  \tgithub.com/wim-web/tnnl/cmd\t0.260s\nok  \tgithub.com/wim-web/tnnl/cmd/exec\t0.503s\nok  \tgithub.com/wim-web/tnnl/cmd/inputfile\t0.870s\nok  \tgithub.com/wim-web/tnnl/cmd/portforward\t1.154s\nok  \tgithub.com/wim-web/tnnl/cmd/remoteportforward\t1.483s\nok  \tgithub.com/wim-web/tnnl/cmd/update\t10.272s\nok  \tgithub.com/wim-web/tnnl/internal/buildinfo\t1.832s\nok  \tgithub.com/wim-web/tnnl/internal/handler\t2.195s\nok  \tgithub.com/wim-web/tnnl/internal/input\t2.589s\nok  \tgithub.com/wim-web/tnnl/internal/listview\t2.857s\nok  \tgithub.com/wim-web/tnnl/internal/session_manager\t2.808s\nok  \tgithub.com/wim-web/tnnl/internal/target\t2.867s\nok  \tgithub.com/wim-web/tnnl/internal/view\t2.824s\nok  \tgithub.com/wim-web/tnnl/pkg/command\t3.203s\nok  \tgithub.com/wim-web/tnnl/pkg/port\t2.935s\n",
+            "result": "survived"
+          },
+          {
+            "id": "M03",
+            "title": "CLI contexts lose cancellation",
+            "exit_code": 0,
+            "edits": {
+              "cmd/exec/exec.go": [
+                "return run(cmd.Context(), resolved)",
+                "return run(context.WithoutCancel(cmd.Context()), resolved)"
+              ],
+              "cmd/portforward/portforward.go": [
+                "return run(cmd.Context(), resolved)",
+                "return run(context.WithoutCancel(cmd.Context()), resolved)"
+              ],
+              "cmd/remoteportforward/remoteportforward.go": [
+                "return run(cmd.Context(), resolved)",
+                "return run(context.WithoutCancel(cmd.Context()), resolved)"
+              ]
+            },
+            "command": "go test -count=1 ./...",
+            "output": "?   \tgithub.com/wim-web/tnnl\t[no test files]\nok  \tgithub.com/wim-web/tnnl/cmd\t0.202s\nok  \tgithub.com/wim-web/tnnl/cmd/exec\t0.464s\nok  \tgithub.com/wim-web/tnnl/cmd/inputfile\t2.539s\nok  \tgithub.com/wim-web/tnnl/cmd/portforward\t1.710s\nok  \tgithub.com/wim-web/tnnl/cmd/remoteportforward\t2.140s\nok  \tgithub.com/wim-web/tnnl/cmd/update\t7.662s\nok  \tgithub.com/wim-web/tnnl/internal/buildinfo\t0.969s\nok  \tgithub.com/wim-web/tnnl/internal/handler\t0.816s\nok  \tgithub.com/wim-web/tnnl/internal/input\t1.182s\nok  \tgithub.com/wim-web/tnnl/internal/listview\t1.301s\nok  \tgithub.com/wim-web/tnnl/internal/session_manager\t2.438s\nok  \tgithub.com/wim-web/tnnl/internal/target\t2.418s\nok  \tgithub.com/wim-web/tnnl/internal/view\t2.368s\nok  \tgithub.com/wim-web/tnnl/pkg/command\t2.419s\nok  \tgithub.com/wim-web/tnnl/pkg/port\t2.357s\n",
+            "result": "survived"
+          },
+          {
+            "id": "M04",
+            "title": "port forwarding document constants changed",
+            "exit_code": 0,
+            "edits": {
+              "pkg/command/portforward.go": [
+                [
+                  "\"AWS-StartPortForwardingSession\"",
+                  "\"Wrong-PortForwardDocument\""
+                ],
+                [
+                  "\"AWS-StartPortForwardingSessionToRemoteHost\"",
+                  "\"Wrong-RemotePortForwardDocument\""
+                ]
+              ]
+            },
+            "command": "go test -count=1 ./...",
+            "output": "?   \tgithub.com/wim-web/tnnl\t[no test files]\nok  \tgithub.com/wim-web/tnnl/cmd\t0.186s\nok  \tgithub.com/wim-web/tnnl/cmd/exec\t0.437s\nok  \tgithub.com/wim-web/tnnl/cmd/inputfile\t0.858s\nok  \tgithub.com/wim-web/tnnl/cmd/portforward\t1.194s\nok  \tgithub.com/wim-web/tnnl/cmd/remoteportforward\t1.750s\nok  \tgithub.com/wim-web/tnnl/cmd/update\t6.950s\nok  \tgithub.com/wim-web/tnnl/internal/buildinfo\t1.337s\nok  \tgithub.com/wim-web/tnnl/internal/handler\t2.401s\nok  \tgithub.com/wim-web/tnnl/internal/input\t2.590s\nok  \tgithub.com/wim-web/tnnl/internal/listview\t1.898s\nok  \tgithub.com/wim-web/tnnl/internal/session_manager\t2.113s\nok  \tgithub.com/wim-web/tnnl/internal/target\t2.318s\nok  \tgithub.com/wim-web/tnnl/internal/view\t2.168s\nok  \tgithub.com/wim-web/tnnl/pkg/command\t2.203s\nok  \tgithub.com/wim-web/tnnl/pkg/port\t2.188s\n",
+            "result": "survived"
+          },
+          {
+            "id": "M05",
+            "title": "cmd.Version hardcoded to dev",
+            "exit_code": 0,
+            "edits": {
+              "cmd/root.go": [
+                [
+                  "\"github.com/wim-web/tnnl/internal/buildinfo\"",
+                  ""
+                ],
+                [
+                  "var Version = buildinfo.Current()",
+                  "var Version = \"dev\""
+                ]
+              ]
+            },
+            "command": "go test -count=1 ./...",
+            "output": "?   \tgithub.com/wim-web/tnnl\t[no test files]\nok  \tgithub.com/wim-web/tnnl/cmd\t0.355s\nok  \tgithub.com/wim-web/tnnl/cmd/exec\t0.596s\nok  \tgithub.com/wim-web/tnnl/cmd/inputfile\t0.244s\nok  \tgithub.com/wim-web/tnnl/cmd/portforward\t0.990s\nok  \tgithub.com/wim-web/tnnl/cmd/remoteportforward\t1.539s\nok  \tgithub.com/wim-web/tnnl/cmd/update\t8.045s\nok  \tgithub.com/wim-web/tnnl/internal/buildinfo\t1.123s\nok  \tgithub.com/wim-web/tnnl/internal/handler\t2.560s\nok  \tgithub.com/wim-web/tnnl/internal/input\t1.726s\nok  \tgithub.com/wim-web/tnnl/internal/listview\t2.384s\nok  \tgithub.com/wim-web/tnnl/internal/session_manager\t1.902s\nok  \tgithub.com/wim-web/tnnl/internal/target\t2.498s\nok  \tgithub.com/wim-web/tnnl/internal/view\t2.304s\nok  \tgithub.com/wim-web/tnnl/pkg/command\t3.324s\nok  \tgithub.com/wim-web/tnnl/pkg/port\t3.312s\n",
+            "result": "survived"
+          }
+        ]
+      },
+      "manual_binary_smoke": {
+        "build": "go build -trimpath -o /tmp/tnnl-test-audit-bin .",
+        "assertions": "all 11 invocations exit 0; version/--version/-v stdout exactly dev\\n",
+        "runs": [
+          {
+            "args": [
+              "version"
+            ],
+            "exit_code": 0
+          },
+          {
+            "args": [
+              "--version"
+            ],
+            "exit_code": 0
+          },
+          {
+            "args": [
+              "-v"
+            ],
+            "exit_code": 0
+          },
+          {
+            "args": [
+              "--help"
+            ],
+            "exit_code": 0
+          },
+          {
+            "args": [
+              "exec",
+              "--help"
+            ],
+            "exit_code": 0
+          },
+          {
+            "args": [
+              "portforward",
+              "--help"
+            ],
+            "exit_code": 0
+          },
+          {
+            "args": [
+              "remoteportforward",
+              "--help"
+            ],
+            "exit_code": 0
+          },
+          {
+            "args": [
+              "update",
+              "--help"
+            ],
+            "exit_code": 0
+          },
+          {
+            "args": [
+              "exec",
+              "make-input-file",
+              "--help"
+            ],
+            "exit_code": 0
+          },
+          {
+            "args": [
+              "portforward",
+              "make-input-file",
+              "--help"
+            ],
+            "exit_code": 0
+          },
+          {
+            "args": [
+              "remoteportforward",
+              "make-input-file",
+              "--help"
+            ],
+            "exit_code": 0
+          }
+        ]
+      }
+    }
+  },
+  "merge_validation": {
+    "base_commit": "0bc466fed663dbeca2e953c0bebcd75cb1f95443",
+    "command": "go test -race -count=1 -timeout=3m -json ./...",
+    "exit_code": 0,
+    "leaf_pass": 393,
+    "fail": 0,
+    "skip": 0,
+    "go_vet": "PASS",
+    "gofmt": "PASS",
+    "shell_verifier": "9 cases PASS",
+    "go_mod_sha256": "7644ada931857762a643d13696733c6e6587c49e307d73cf2efddbfbdaac5def",
+    "note": "Revalidated with latest main dependencies; production/test source matches recorded source_sha256. GitHub CI is tracked by the pull request."
+  }
+}

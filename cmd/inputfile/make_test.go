@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/wim-web/tnnl/internal/input"
@@ -43,16 +44,12 @@ func TestNewCreatesTemplateAtOutputAndReportsPath(t *testing.T) {
 }
 
 func TestNewUsesParentSpecificDescription(t *testing.T) {
-	for _, parent := range []string{"exec", "portforward", "remoteportforward"} {
-		t.Run(parent, func(t *testing.T) {
-			command := New(parent, parent+"-input.json", struct{}{})
-			if got, want := command.Use, "make-input-file"; got != want {
-				t.Fatalf("Use = %q, want %q", got, want)
-			}
-			if got, want := command.Short, "Create an input file template for "+parent; got != want {
-				t.Fatalf("Short = %q, want %q", got, want)
-			}
-		})
+	command := New("exec", "exec-input.json", struct{}{})
+	if got, want := command.Use, "make-input-file"; got != want {
+		t.Fatalf("Use = %q, want %q", got, want)
+	}
+	if got, want := command.Short, "Create an input file template for exec"; got != want {
+		t.Fatalf("Short = %q, want %q", got, want)
 	}
 }
 
@@ -87,7 +84,12 @@ func TestNewRefusesExistingFileAndPreservesContents(t *testing.T) {
 
 func TestNewForceReplacesExistingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "existing.json")
-	if err := os.WriteFile(path, []byte("stale trailing bytes that must disappear"), 0o600); err != nil {
+	original := []byte(`{"cluster":"` + strings.Repeat("old-cluster", 32) + `","target_port_number":"80","local_port_number":"8080"}`)
+	wantContent := "{\n  \"cluster\": \"\",\n  \"service\": \"\",\n  \"target_port_number\": \"443\",\n  \"local_port_number\": \"8443\"\n}\n"
+	if len(original) <= len(wantContent) {
+		t.Fatal("fixture must replace a longer file with shorter JSON")
+	}
+	if err := os.WriteFile(path, original, 0o600); err != nil {
 		t.Fatalf("write existing file: %v", err)
 	}
 	skeleton := input.PortForwardInput{TargetPortNumber: "443", LocalPortNumber: "8443"}
@@ -104,8 +106,11 @@ func TestNewForceReplacesExistingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read replaced file: %v", err)
 	}
+	if string(content) != wantContent {
+		t.Fatalf("replaced file = %q (%d bytes), want %q (%d bytes)", content, len(content), wantContent, len(wantContent))
+	}
 	var got input.PortForwardInput
-	if err := json.Unmarshal(content, &got); err != nil {
+	if err := input.ReadInputFile(&got, path); err != nil {
 		t.Fatalf("decode replaced file: %v; content = %q", err, content)
 	}
 	if got != skeleton {

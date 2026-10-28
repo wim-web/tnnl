@@ -160,12 +160,22 @@ func TestRemoteSessionDoesNotTerminateWithoutID(t *testing.T) {
 
 func TestRemoteSessionCleanupTimeoutIsDiscoverable(t *testing.T) {
 	pluginErr := errors.New("plugin failed")
+	watchdogErr := errors.New("cleanup context did not expire before the independent watchdog")
 	session := RemoteSession{
 		ID:         "s-1",
 		Invocation: validInvocation(),
 		terminate: func(ctx context.Context, _ string) error {
-			<-ctx.Done()
-			return ctx.Err()
+			watchdog := time.NewTimer(time.Second)
+			defer watchdog.Stop()
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-watchdog.C:
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				return watchdogErr
+			}
 		},
 		cleanupTimeout: 20 * time.Millisecond,
 	}
@@ -174,6 +184,9 @@ func TestRemoteSessionCleanupTimeoutIsDiscoverable(t *testing.T) {
 		return pluginErr
 	}))
 
+	if errors.Is(err, watchdogErr) {
+		t.Fatal(watchdogErr)
+	}
 	if !errors.Is(err, pluginErr) {
 		t.Fatalf("Run() error = %v, want errors.Is(pluginErr)", err)
 	}
@@ -189,11 +202,13 @@ func TestRemoteSessionPassesOriginalContextToPlugin(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.WithValue(context.Background(), pluginContextKey{}, pluginValue))
 	cancel(cancelCause)
 	pluginCalled := false
-	session := validRemoteSession(func(context.Context, string) error {
-		t.Fatal("terminate called for session without ID")
+	terminateCalls := 0
+	var terminatedID string
+	session := validRemoteSession(func(_ context.Context, id string) error {
+		terminateCalls++
+		terminatedID = id
 		return nil
 	})
-	session.ID = ""
 
 	err := session.Run(ctx, pluginFunc(func(pluginCtx context.Context, invocation session_manager.Invocation) error {
 		pluginCalled = true
@@ -217,6 +232,9 @@ func TestRemoteSessionPassesOriginalContextToPlugin(t *testing.T) {
 	}
 	if !errors.Is(err, cancelCause) {
 		t.Fatalf("Run() error = %v, want errors.Is(cancelCause)", err)
+	}
+	if terminateCalls != 1 || terminatedID != session.ID {
+		t.Fatalf("terminate calls = %d, session ID = %q; want 1, %q", terminateCalls, terminatedID, session.ID)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -16,13 +17,19 @@ import (
 )
 
 const (
-	helperModeEnv       = "GO_WANT_SESSION_MANAGER_HELPER"
-	helperArgumentsEnv  = "SESSION_MANAGER_HELPER_ARGUMENTS"
-	helperStartedEnv    = "SESSION_MANAGER_HELPER_STARTED"
-	helperModeSuccess   = "success"
-	helperModeFailure   = "failure"
-	helperModeBlock     = "block"
-	helperModeMarkStart = "mark-start"
+	helperModeEnv         = "GO_WANT_SESSION_MANAGER_HELPER"
+	helperArgumentsEnv    = "SESSION_MANAGER_HELPER_ARGUMENTS"
+	helperStartedEnv      = "SESSION_MANAGER_HELPER_STARTED"
+	helperModeSuccess     = "success"
+	helperModeFailure     = "failure"
+	helperModeBlock       = "block"
+	helperModeMarkStart   = "mark-start"
+	helperModeVersion     = "version"
+	helperModePipeParent  = "pipe-parent"
+	helperModePipeChild   = "pipe-child"
+	helperChildStartedEnv = "SESSION_MANAGER_HELPER_CHILD_STARTED"
+	helperChildStoppedEnv = "SESSION_MANAGER_HELPER_CHILD_STOPPED"
+	helperReleaseEnv      = "SESSION_MANAGER_HELPER_RELEASE"
 
 	helperSynchronizationLimit = 5 * time.Second
 	helperPollInterval         = 10 * time.Millisecond
@@ -38,7 +45,7 @@ func TestMain(m *testing.M) {
 }
 
 func runHelperProcess(mode string) {
-	if startedFile := os.Getenv(helperStartedEnv); startedFile != "" {
+	if startedFile := os.Getenv(helperStartedEnv); startedFile != "" && mode != helperModePipeParent && mode != helperModePipeChild {
 		if err := os.WriteFile(startedFile, []byte("started"), 0o600); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(2)
@@ -46,6 +53,43 @@ func runHelperProcess(mode string) {
 	}
 
 	switch mode {
+	case helperModeVersion:
+		record := preflightProcessRecord{
+			Arguments:      os.Args[1:],
+			Profile:        os.Getenv("AWS_PROFILE"),
+			DefaultProfile: os.Getenv("AWS_DEFAULT_PROFILE"),
+			SSMEndpoint:    os.Getenv("AWS_ENDPOINT_URL_SSM"),
+			GlobalEndpoint: os.Getenv("AWS_ENDPOINT_URL"),
+		}
+		encoded, err := json.Marshal(record)
+		if err == nil {
+			err = os.WriteFile(os.Getenv(helperArgumentsEnv), encoded, 0o600)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		fmt.Fprintln(os.Stdout, "1.2.3")
+		os.Exit(0)
+	case helperModePipeParent:
+		runPreflightPipeParent()
+		return
+	case helperModePipeChild:
+		if err := os.WriteFile(os.Getenv(helperChildStartedEnv), []byte("started"), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		// A release file avoids leaving an orphan running after a failed test.
+		// The independent limit also bounds lifetime if the test process dies.
+		if err := waitForHelperStarted(os.Getenv(helperReleaseEnv), 10*time.Second); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if err := os.WriteFile(os.Getenv(helperChildStoppedEnv), []byte("stopped"), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		os.Exit(0)
 	case helperModeSuccess:
 		arguments, err := json.Marshal(os.Args[1:])
 		if err != nil {
@@ -227,49 +271,22 @@ func TestPreflightRejectsEmptyVersionOutput(t *testing.T) {
 }
 
 func TestPreflightDeadlineIsDiscoverable(t *testing.T) {
-	processErr := errors.New("process killed")
-	deps := dependencies{
-		lookPath: func(string) (string, error) { return "/plugin", nil },
-		commandContext: func(ctx context.Context, _ string, _ ...string) command {
-			return commandFunc(func() ([]byte, error) {
-				<-ctx.Done()
-				return nil, processErr
-			})
-		},
-		preflightLimit: 20 * time.Millisecond,
-	}
-
-	_, err := preflight(context.Background(), deps)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("preflight() error = %v, want errors.Is(DeadlineExceeded)", err)
-	}
-	if !errors.Is(err, processErr) {
-		t.Fatalf("preflight() error = %v, want errors.Is(processErr)", err)
-	}
+	t.Run("caller deadline", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		assertPreflightStopsAfterContext(t, ctx, func() { <-ctx.Done() }, cancel, context.DeadlineExceeded, time.Second)
+	})
+	t.Run("preflight timeout", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		assertPreflightStopsAfterContext(t, ctx, func() {}, cancel, context.DeadlineExceeded, 4*time.Second)
+	})
 }
 
 func TestPreflightParentCancellationIsDiscoverable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	processErr := errors.New("process killed")
-	deps := dependencies{
-		lookPath: func(string) (string, error) { return "/plugin", nil },
-		commandContext: func(ctx context.Context, _ string, _ ...string) command {
-			return commandFunc(func() ([]byte, error) {
-				<-ctx.Done()
-				return nil, processErr
-			})
-		},
-		preflightLimit: time.Second,
-	}
-
-	_, err := preflight(ctx, deps)
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("preflight() error = %v, want errors.Is(Canceled)", err)
-	}
-	if !errors.Is(err, processErr) {
-		t.Fatalf("preflight() error = %v, want errors.Is(processErr)", err)
-	}
+	defer cancel()
+	assertPreflightStopsAfterContext(t, ctx, cancel, cancel, context.Canceled, time.Second)
 }
 
 func TestPreflightSuccessUsesExactVersionCommandAndEnvironment(t *testing.T) {
@@ -308,35 +325,33 @@ func TestPreflightSuccessUsesExactVersionCommandAndEnvironment(t *testing.T) {
 			t.Setenv("AWS_ENDPOINT_URL_SSM", tt.ssmEndpoint)
 			t.Setenv("AWS_ENDPOINT_URL", tt.globalEndpoint)
 
-			var gotName string
-			var gotArguments []string
-			deps := dependencies{
-				lookPath: func(name string) (string, error) {
-					if name != CommandName {
-						t.Fatalf("lookPath name = %q, want %q", name, CommandName)
-					}
-					return "/resolved/session-manager-plugin", nil
-				},
-				commandContext: func(_ context.Context, name string, arguments ...string) command {
-					gotName = name
-					gotArguments = append([]string(nil), arguments...)
-					return commandFunc(func() ([]byte, error) { return []byte("1.2.3\n"), nil })
-				},
-				preflightLimit: time.Second,
-			}
-
-			runner, err := preflight(context.Background(), deps)
+			fixture := installPreflightHelper(t, helperModeVersion)
+			plugin, err := Preflight(context.Background())
 			if err != nil {
 				t.Fatal(err)
 			}
-			if gotName != "/resolved/session-manager-plugin" {
-				t.Fatalf("command name = %q", gotName)
+			runner, ok := plugin.(*Runner)
+			if !ok {
+				t.Fatalf("Preflight() plugin = %T, want *Runner", plugin)
 			}
-			if !reflect.DeepEqual(gotArguments, []string{"--version"}) {
-				t.Fatalf("command arguments = %#v, want [--version]", gotArguments)
+			if runner.path != fixture.path || runner.profile != tt.wantProfile || runner.endpoint != tt.wantEndpoint {
+				t.Fatalf("runner = %#v, want path=%q profile=%q endpoint=%q", runner, fixture.path, tt.wantProfile, tt.wantEndpoint)
 			}
-			if runner.path != gotName || runner.profile != tt.wantProfile || runner.endpoint != tt.wantEndpoint {
-				t.Fatalf("runner = %#v, want path=%q profile=%q endpoint=%q", runner, gotName, tt.wantProfile, tt.wantEndpoint)
+			encoded, err := os.ReadFile(fixture.arguments)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got preflightProcessRecord
+			if err := json.Unmarshal(encoded, &got); err != nil {
+				t.Fatal(err)
+			}
+			want := preflightProcessRecord{
+				Arguments: []string{"--version"},
+				Profile:   tt.profile, DefaultProfile: tt.defaultProfile,
+				SSMEndpoint: tt.ssmEndpoint, GlobalEndpoint: tt.globalEndpoint,
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("plugin process = %#v, want %#v", got, want)
 			}
 		})
 	}
@@ -560,6 +575,126 @@ func (c *manualDeadlineContext) Err() error {
 
 func (c *manualDeadlineContext) expire() {
 	c.once.Do(func() { close(c.done) })
+}
+
+type preflightProcessRecord struct {
+	Arguments                                            []string
+	Profile, DefaultProfile, SSMEndpoint, GlobalEndpoint string
+}
+
+type preflightProcessFixture struct {
+	path, arguments, started, stopped, release string
+}
+
+func installPreflightHelper(t *testing.T, mode string) preflightProcessFixture {
+	t.Helper()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	fixture := preflightProcessFixture{
+		path:      filepath.Join(dir, "session-manager-plugin"),
+		arguments: filepath.Join(dir, "arguments.json"),
+		started:   filepath.Join(dir, "started"),
+		stopped:   filepath.Join(dir, "child-stopped"),
+		release:   filepath.Join(dir, "release"),
+	}
+	if err := os.Symlink(executable, fixture.path); err != nil {
+		t.Fatal(err)
+	}
+	// PATH contains only our helper, so no installed plugin can be invoked.
+	t.Setenv("PATH", dir)
+	t.Setenv(helperModeEnv, mode)
+	t.Setenv(helperArgumentsEnv, fixture.arguments)
+	t.Setenv(helperStartedEnv, fixture.started)
+	t.Setenv(helperChildStartedEnv, filepath.Join(dir, "child-started"))
+	t.Setenv(helperChildStoppedEnv, fixture.stopped)
+	t.Setenv(helperReleaseEnv, fixture.release)
+	// The race runtime's default exit sleep is unrelated to pipe ownership.
+	t.Setenv("GORACE", os.Getenv("GORACE")+" atexit_sleep_ms=0")
+	return fixture
+}
+
+func runPreflightPipeParent() {
+	executable, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	child := exec.Command(executable)
+	child.Env = append(os.Environ(), helperModeEnv+"="+helperModePipeChild)
+	child.Stdout, child.Stderr = os.Stdout, os.Stderr
+	if err := child.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if err := waitForHelperStarted(os.Getenv(helperChildStartedEnv), helperSynchronizationLimit); err != nil {
+		_ = child.Process.Kill()
+		_ = child.Wait()
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if err := os.WriteFile(os.Getenv(helperStartedEnv), []byte("inherited pipes ready"), 0o600); err != nil {
+		_ = child.Process.Kill()
+		_ = child.Wait()
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if err := child.Wait(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	os.Exit(0)
+}
+
+func assertPreflightStopsAfterContext(t *testing.T, ctx context.Context, endContext, cancel func(), want error, resultLimit time.Duration) {
+	t.Helper()
+	fixture := installPreflightHelper(t, helperModePipeParent)
+	result := make(chan error, 1)
+	go func() {
+		_, err := Preflight(ctx)
+		result <- err
+	}()
+	received := false
+	defer func() {
+		cancel()
+		if err := os.WriteFile(fixture.release, []byte("release"), 0o600); err != nil {
+			t.Errorf("release inherited pipes: %v", err)
+		}
+		if !received {
+			select {
+			case <-result:
+			case <-time.After(helperSynchronizationLimit):
+				t.Error("Preflight did not stop after fixture cleanup")
+			}
+		}
+		if err := waitForHelperStarted(fixture.stopped, helperSynchronizationLimit); err != nil {
+			t.Errorf("wait for inherited pipe holder cleanup: %v", err)
+		}
+	}()
+	if err := waitForHelperStarted(fixture.started, helperSynchronizationLimit); err != nil {
+		t.Fatalf("wait for actual plugin and inherited pipes: %v", err)
+	}
+	// Both the plugin and its pipe-holding descendant are running before the
+	// caller context ends; the holder stays alive until this test releases it.
+	endContext()
+	select {
+	case err := <-result:
+		received = true
+		if !errors.Is(err, want) {
+			t.Fatalf("Preflight() error = %v, want %v", err, want)
+		}
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			t.Fatalf("Preflight() error = %v, want wrapped process exit error", err)
+		}
+		if !strings.Contains(err.Error(), CommandName+" --version failed") {
+			t.Fatalf("Preflight() error = %q, want command context", err)
+		}
+	case <-time.After(resultLimit):
+		t.Fatalf("Preflight waited for inherited output pipes beyond %s result limit", resultLimit)
+	}
 }
 
 type commandFunc func() ([]byte, error)

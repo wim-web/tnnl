@@ -60,11 +60,25 @@ func TestUpdaterInstallsOnlyAfterVerification(t *testing.T) {
 
 func TestUpdaterStagesCandidateBesideExecutable(t *testing.T) {
 	fixture := newUpdaterFixture(t, "1.0.0", "1.2.3")
+	observedPath := filepath.Join(t.TempDir(), "candidate-path")
+	t.Setenv("UPDATE_CANDIDATE_PATH", observedPath)
+	fixture.candidate = append([]byte("#!/bin/sh\nprintf '%s\\n' \"$0\" > \"$UPDATE_CANDIDATE_PATH\"\n"),
+		bytes.TrimPrefix(fixture.candidate, []byte("#!/bin/sh\n"))...)
+	fixture.archive = archiveWithBinary(t, fixture.candidate)
+	fixture.manifest = checksumManifest(testAssetName, fixture.archive)
 	unavailableSystemTemp := filepath.Join(t.TempDir(), "missing")
 	t.Setenv("TMPDIR", unavailableSystemTemp)
 
 	if err := fixture.updater().run(context.Background(), io.Discard); err != nil {
 		t.Fatalf("updater.run() error = %v; staging must not depend on system temp: %s", err, unavailableSystemTemp)
+	}
+	recordedPath, err := os.ReadFile(observedPath)
+	if err != nil {
+		t.Fatalf("read candidate's observed executable path: %v", err)
+	}
+	candidatePath := strings.TrimSpace(string(recordedPath))
+	if got, want := filepath.Dir(filepath.Dir(candidatePath)), filepath.Dir(fixture.currentPath); got != want {
+		t.Fatalf("candidate executed at %q, want staging directory directly inside executable directory %q", candidatePath, want)
 	}
 
 	contents, err := os.ReadFile(fixture.currentPath)
@@ -177,12 +191,41 @@ func TestUpdaterAlreadyLatestMakesNoAssetRequests(t *testing.T) {
 }
 
 func TestUpdaterReturnsOutputError(t *testing.T) {
-	fixture := newUpdaterFixture(t, "1.2.3", "1.2.3")
-	wantErr := errors.New("write failed")
+	for _, tt := range []struct {
+		name           string
+		currentVersion string
+		updated        bool
+	}{
+		{name: "already latest", currentVersion: "1.2.3"},
+		{name: "updated", currentVersion: "1.0.0", updated: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			fixture := newUpdaterFixture(t, tt.currentVersion, "1.2.3")
+			wantErr := errors.New("write failed")
 
-	err := fixture.updater().run(context.Background(), updateFailWriter{err: wantErr})
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("updater.run() error = %v, want %v", err, wantErr)
+			err := fixture.updater().run(context.Background(), updateFailWriter{err: wantErr})
+			if !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "write update status") {
+				t.Fatalf("updater.run() error = %v, want wrapped status write error %v", err, wantErr)
+			}
+			if !tt.updated {
+				fixture.assertCurrentUnchanged(t)
+				return
+			}
+			contents, err := os.ReadFile(fixture.currentPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(contents, fixture.candidate) {
+				t.Fatalf("executable after status write failure = %q, want installed candidate %q", contents, fixture.candidate)
+			}
+			info, err := os.Stat(fixture.currentPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := info.Mode().Perm(), os.FileMode(0o755); got != want {
+				t.Fatalf("updated executable mode = %o, want %o", got, want)
+			}
+		})
 	}
 }
 

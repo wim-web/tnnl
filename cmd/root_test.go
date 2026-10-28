@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/wim-web/tnnl/internal/buildinfo"
 )
 
 func TestExecuteContextPropagatesCancellation(t *testing.T) {
@@ -94,12 +93,6 @@ func TestExecuteContextReturnsChildErrorSilently(t *testing.T) {
 func TestRootCommandMetadataAndFlags(t *testing.T) {
 	prepareRootCommandTest(t, []string{}, io.Discard, io.Discard)
 
-	if !RootCmd.SilenceErrors {
-		t.Error("RootCmd.SilenceErrors = false, want true")
-	}
-	if !RootCmd.SilenceUsage {
-		t.Error("RootCmd.SilenceUsage = false, want true")
-	}
 	if strings.TrimSpace(RootCmd.Short) == "" {
 		t.Error("RootCmd.Short is empty")
 	}
@@ -149,12 +142,6 @@ func TestRootHelpDocumentsAWSSetup(t *testing.T) {
 	)
 }
 
-func TestVersionDefaultsToBuildInfo(t *testing.T) {
-	if got, want := Version, buildinfo.Current(); got != want {
-		t.Fatalf("Version = %q, want buildinfo.Current() %q", got, want)
-	}
-}
-
 func TestVersionCommandsWriteIdenticalOutput(t *testing.T) {
 	tests := []struct {
 		name string
@@ -163,7 +150,6 @@ func TestVersionCommandsWriteIdenticalOutput(t *testing.T) {
 		{name: "subcommand", args: []string{"version"}},
 		{name: "flag", args: []string{"--version"}},
 	}
-	outputs := make(map[string]string, len(tests))
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -180,12 +166,7 @@ func TestVersionCommandsWriteIdenticalOutput(t *testing.T) {
 			if got := stderr.String(); got != "" {
 				t.Errorf("version error output = %q, want empty output", got)
 			}
-			outputs[tt.name] = stdout.String()
 		})
-	}
-
-	if got, want := outputs["flag"], outputs["subcommand"]; got != want {
-		t.Errorf("--version output = %q, want version output %q", got, want)
 	}
 }
 

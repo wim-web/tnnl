@@ -84,16 +84,42 @@ func TestEligibleTaskRequiresReadyTaskAndContainer(t *testing.T) {
 				task.Containers[0].ManagedAgents[0].LastStatus = aws.String(" RUNNING ")
 			},
 		},
+		// Keep every preceding condition ready so each nil field reaches its
+		// own check instead of being hidden by an earlier short circuit.
 		{
-			name: "nil pointers",
+			name: "nil task status",
 			mutate: func(task *types.Task) {
 				task.LastStatus = nil
+			},
+		},
+		{
+			name: "nil task ARN",
+			mutate: func(task *types.Task) {
 				task.TaskArn = nil
-				task.Containers = []types.Container{{
-					ManagedAgents: []types.ManagedAgent{{
-						Name: types.ManagedAgentNameExecuteCommandAgent,
-					}},
-				}}
+			},
+		},
+		{
+			name: "nil container name",
+			mutate: func(task *types.Task) {
+				task.Containers[0].Name = nil
+			},
+		},
+		{
+			name: "nil container status",
+			mutate: func(task *types.Task) {
+				task.Containers[0].LastStatus = nil
+			},
+		},
+		{
+			name: "nil runtime ID",
+			mutate: func(task *types.Task) {
+				task.Containers[0].RuntimeId = nil
+			},
+		},
+		{
+			name: "nil execute command agent status",
+			mutate: func(task *types.Task) {
+				task.Containers[0].ManagedAgents[0].LastStatus = nil
 			},
 		},
 	}
@@ -124,11 +150,6 @@ func TestEligibleContainersReturnsOnlyReadyContainers(t *testing.T) {
 	missingAgent.ManagedAgents = nil
 	pendingAgent := readyContainer("pending-agent", "runtime-pending-agent")
 	pendingAgent.ManagedAgents[0].LastStatus = aws.String("PENDING")
-	nilPointers := types.Container{
-		ManagedAgents: []types.ManagedAgent{{
-			Name: types.ManagedAgentNameExecuteCommandAgent,
-		}},
-	}
 
 	task := fullyReadyTask()
 	task.Containers = []types.Container{
@@ -138,7 +159,6 @@ func TestEligibleContainersReturnsOnlyReadyContainers(t *testing.T) {
 		missingRuntimeID,
 		missingAgent,
 		pendingAgent,
-		nilPointers,
 	}
 
 	want := []types.Container{ready}

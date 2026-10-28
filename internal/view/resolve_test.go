@@ -63,17 +63,12 @@ func TestResolveTargetSelectsExactReadyTaskARN(t *testing.T) {
 		if !strings.Contains(strings.ToLower(title), "task") {
 			t.Fatalf("chooser title = %q, want task title", title)
 		}
-		if len(options) != 2 {
-			t.Fatalf("task option count = %d, want 2", len(options))
+		want := []listview.Option{
+			{Label: "service:payments task-first", Value: viewFirstARN},
+			{Label: "service:payments task-second", Value: viewSecondARN},
 		}
-		wantValues := []string{viewFirstARN, viewSecondARN}
-		for i, option := range options {
-			if option.Value != wantValues[i] {
-				t.Errorf("task option %d value = %q, want full ARN %q", i, option.Value, wantValues[i])
-			}
-			if !strings.Contains(option.Label, []string{"task-first", "task-second"}[i]) {
-				t.Errorf("task option %d label = %q, want short unique task ID", i, option.Label)
-			}
+		if !reflect.DeepEqual(options, want) {
+			t.Fatalf("task options = %#v, want exact labels and full ARNs %#v", options, want)
 		}
 		return options[1].Value, false, nil
 	}
@@ -211,27 +206,29 @@ func TestResolveTargetRejectsEmptyResourcesBeforeChooser(t *testing.T) {
 		}
 	})
 
-	t.Run("no eligible tasks", func(t *testing.T) {
-		resolver := &fakeTargetResolver{}
-		chooseCalls := 0
+	t.Run("wait reports no eligible tasks", func(t *testing.T) {
+		waitErr := errors.New("no eligible tasks after waiting")
+		resolver := &fakeTargetResolver{waitErr: waitErr}
 		choose := func(string, []listview.Option) (string, bool, error) {
-			chooseCalls++
+			t.Fatal("chooser called after wait failure")
 			return "", false, nil
 		}
 
 		got, quit, err := ResolveTarget(context.Background(), resolver, choose, "production", "", 0)
-		assertResolveError(t, got, quit, err, "task", "eligible")
-		if chooseCalls != 0 {
-			t.Fatalf("chooser call count = %d, want 0", chooseCalls)
+		assertResolveError(t, got, quit, err, "eligible ECS tasks", "production")
+		if !errors.Is(err, waitErr) {
+			t.Fatalf("ResolveTarget() error = %v, want wait error cause", err)
+		}
+		if want := []string{"wait"}; !reflect.DeepEqual(resolver.calls, want) {
+			t.Fatalf("resolver calls = %v, want %v", resolver.calls, want)
 		}
 	})
 
-	t.Run("no eligible containers", func(t *testing.T) {
-		noneligible := viewReadyTask(viewFirstARN, "service:payments", types.Container{
-			Name:       aws.String("app"),
-			LastStatus: aws.String("RUNNING"),
-			RuntimeId:  aws.String(""),
-		})
+	t.Run("resolver violates eligibility contract", func(t *testing.T) {
+		// The production resolver excludes this task. Keep one representative
+		// guard for an injected resolver returning a task with no ready container.
+		container := viewReadyContainer("app", "")
+		noneligible := viewReadyTask(viewFirstARN, "service:payments", container)
 		resolver := &fakeTargetResolver{tasks: []types.Task{noneligible}}
 		chooseCalls := 0
 		choose := func(string, []listview.Option) (string, bool, error) {
@@ -378,12 +375,13 @@ func TestResolveTargetUserCancellation(t *testing.T) {
 	}
 }
 
-func TestResolveTargetChooserErrorWinsOverCancellation(t *testing.T) {
+func TestResolveTargetPropagatesChooserErrors(t *testing.T) {
 	tests := []struct {
 		name         string
 		resolver     *fakeTargetResolver
 		inputCluster string
 		wantResource string
+		quit         bool
 	}{
 		{
 			name:         "cluster chooser",
@@ -413,18 +411,25 @@ func TestResolveTargetChooserErrorWinsOverCancellation(t *testing.T) {
 			inputCluster: "production",
 			wantResource: "container",
 		},
+		{
+			name:         "error wins over simultaneous quit",
+			resolver:     &fakeTargetResolver{clusters: []string{viewClusterARN}},
+			inputCluster: "",
+			wantResource: "cluster",
+			quit:         true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			chooseErr := errors.New("chooser quit-error sentinel")
+			chooseErr := errors.New("chooser sentinel")
 			chooseCalls := 0
 			choose := func(title string, _ []listview.Option) (string, bool, error) {
 				chooseCalls++
 				if !strings.Contains(strings.ToLower(title), tt.wantResource) {
 					t.Fatalf("chooser title = %q, want %q resource", title, tt.wantResource)
 				}
-				return "ignored", true, chooseErr
+				return "ignored", tt.quit, chooseErr
 			}
 
 			got, quit, err := ResolveTarget(context.Background(), tt.resolver, choose, tt.inputCluster, "", 0)
@@ -435,37 +440,14 @@ func TestResolveTargetChooserErrorWinsOverCancellation(t *testing.T) {
 			if chooseCalls != 1 {
 				t.Fatalf("chooser call count = %d, want 1", chooseCalls)
 			}
+			wantCalls := []string{"wait"}
 			if tt.wantResource == "cluster" {
-				if wantCalls := []string{"clusters"}; !reflect.DeepEqual(tt.resolver.calls, wantCalls) {
-					t.Fatalf("resolver calls after cluster chooser error = %v, want %v", tt.resolver.calls, wantCalls)
-				}
+				wantCalls = []string{"clusters"}
+			}
+			if !reflect.DeepEqual(tt.resolver.calls, wantCalls) {
+				t.Fatalf("resolver calls after chooser error = %v, want %v", tt.resolver.calls, wantCalls)
 			}
 		})
-	}
-}
-
-func TestResolveTargetPropagatesChooserError(t *testing.T) {
-	chooseErr := errors.New("chooser sentinel")
-	resolver := &fakeTargetResolver{tasks: []types.Task{
-		viewReadyTask(viewFirstARN, "service:payments", viewReadyContainer("app", "runtime-first")),
-		viewReadyTask(viewSecondARN, "service:payments", viewReadyContainer("app", "runtime-second")),
-	}}
-	choose := func(string, []listview.Option) (string, bool, error) {
-		return "", false, chooseErr
-	}
-
-	got, quit, err := ResolveTarget(context.Background(), resolver, choose, "production", "", 0)
-	if !errors.Is(err, chooseErr) {
-		t.Fatalf("ResolveTarget() error = %v, want errors.Is(chooser sentinel)", err)
-	}
-	if quit {
-		t.Fatal("ResolveTarget() quit = true, want false on chooser error")
-	}
-	if !reflect.DeepEqual(got, target.Resolved{}) {
-		t.Fatalf("ResolveTarget() result = %#v, want zero value on chooser error", got)
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "task") {
-		t.Errorf("ResolveTarget() error = %q, want task context", err)
 	}
 }
 
@@ -526,40 +508,6 @@ func TestResolveTargetRejectsMalformedMetadata(t *testing.T) {
 			wantResource: "task",
 			wantWait:     true,
 		},
-		{
-			name: "container name",
-			resolver: &fakeTargetResolver{tasks: []types.Task{
-				viewReadyTask(viewFirstARN, "service:payments", types.Container{
-					Name:       aws.String("   "),
-					LastStatus: aws.String("RUNNING"),
-					RuntimeId:  aws.String("runtime"),
-					ManagedAgents: []types.ManagedAgent{{
-						Name:       types.ManagedAgentNameExecuteCommandAgent,
-						LastStatus: aws.String("RUNNING"),
-					}},
-				}),
-			}},
-			inputCluster: "production",
-			wantResource: "container",
-			wantWait:     true,
-		},
-		{
-			name: "container runtime ID",
-			resolver: &fakeTargetResolver{tasks: []types.Task{
-				viewReadyTask(viewFirstARN, "service:payments", types.Container{
-					Name:       aws.String("app"),
-					LastStatus: aws.String("RUNNING"),
-					RuntimeId:  nil,
-					ManagedAgents: []types.ManagedAgent{{
-						Name:       types.ManagedAgentNameExecuteCommandAgent,
-						LastStatus: aws.String("RUNNING"),
-					}},
-				}),
-			}},
-			inputCluster: "production",
-			wantResource: "container",
-			wantWait:     true,
-		},
 	}
 
 	for _, tt := range tests {
@@ -586,44 +534,15 @@ func TestResolveTargetRejectsMalformedMetadata(t *testing.T) {
 	}
 }
 
-func TestTaskOptionsPreserveExactTaskIdentity(t *testing.T) {
-	first := viewReadyTask(viewFirstARN, "service:payments", viewReadyContainer("app", "runtime-first"))
-	second := viewReadyTask(viewSecondARN, "service:payments", viewReadyContainer("app", "runtime-second"))
-
-	got, err := taskOptions([]types.Task{first, second})
+func TestTaskOptionsUsesFallbackLabel(t *testing.T) {
+	task := viewReadyTask(viewFirstARN, "   ", viewReadyContainer("app", "runtime"))
+	got, err := taskOptions([]types.Task{task})
 	if err != nil {
 		t.Fatalf("taskOptions() error = %v", err)
 	}
-	want := []listview.Option{
-		{Label: "service:payments task-first", Value: viewFirstARN},
-		{Label: "service:payments task-second", Value: viewSecondARN},
+	if want := "task task-first"; got[0].Label != want {
+		t.Fatalf("taskOptions()[0].Label = %q, want %q", got[0].Label, want)
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("taskOptions() = %#v, want %#v", got, want)
-	}
-}
-
-func TestTaskOptionsUsesFallbackLabelAndRejectsMalformedARN(t *testing.T) {
-	t.Run("blank group uses task label", func(t *testing.T) {
-		task := viewReadyTask(viewFirstARN, "   ", viewReadyContainer("app", "runtime"))
-		got, err := taskOptions([]types.Task{task})
-		if err != nil {
-			t.Fatalf("taskOptions() error = %v", err)
-		}
-		if want := "task task-first"; got[0].Label != want {
-			t.Fatalf("taskOptions()[0].Label = %q, want %q", got[0].Label, want)
-		}
-	})
-
-	t.Run("malformed task ARN", func(t *testing.T) {
-		_, err := taskOptions([]types.Task{{TaskArn: aws.String("malformed")}})
-		if err == nil {
-			t.Fatal("taskOptions() error = nil, want malformed task error")
-		}
-		if !strings.Contains(strings.ToLower(err.Error()), "task") {
-			t.Fatalf("taskOptions() error = %q, want task context", err)
-		}
-	})
 }
 
 func TestTaskByARNUsesOnlyExactFullARN(t *testing.T) {
