@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.39](https://github.com/wim-web/tnnl/compare/v0.6.38...v0.6.39) (2026-11-20)
+
+
+### Bug Fixes
+
+* **deps:** update aws-sdk-go-v2 monorepo ([#219](https://github.com/wim-web/tnnl/issues/219)) ([1bc8c73](https://github.com/wim-web/tnnl/commit/1bc8c73fdbcb8278f026b29250b06d537178690d))
+* **deps:** update module charm.land/lipgloss/v2 to v2.1.1 ([#220](https://github.com/wim-web/tnnl/issues/220)) ([cd06265](https://github.com/wim-web/tnnl/commit/cd06265ccf8411daaffce1463966e04a655b0d28))
+
 ## [0.6.38](https://github.com/wim-web/tnnl/compare/v0.6.37...v0.6.38) (2026-11-13)
 
 
